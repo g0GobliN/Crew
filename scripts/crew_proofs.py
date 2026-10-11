@@ -38,6 +38,12 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import crew_proof_board  # noqa: E402
 
+# Hardened git: this runner reads revisions out of the checkout, and a repository's own config must
+# never run a program for us (the GitSpawn class - core.fsmonitor, hooks, filter drivers). The
+# helper sits in the tooling dir beside this one; see git_safe.py for what it pins.
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "dev"))
+import git_safe  # noqa: E402
+
 # Proofs that need something outside this box: a desktop session, a chat round trip.
 LIVE = {
     "crew_panel_click_check.py": "drives the desktop panel",
@@ -110,12 +116,22 @@ def run_one(name, timeout, extra=()):
 
 
 def _git_lines(args):
+    """Changed-file names, or None when git could not answer.
+
+    None is not empty: an empty list means "nothing changed" and lets a pre-push gate pass, so a
+    refused or failed git must never look like that. changed_since() turns None into the safe
+    answer (run every proof) instead.
+    """
     try:
-        p = subprocess.run(["git"] + args, cwd=os.path.dirname(HERE), capture_output=True, text=True,
-                           timeout=120)
-        return [x for x in p.stdout.split() if x]
-    except Exception:  # noqa: BLE001
-        return []
+        p = git_safe.run_git(["git"] + args, cwd=os.path.dirname(HERE), capture_output=True,
+                             text=True, timeout=120)
+    except Exception as exc:  # noqa: BLE001 - a git we will not run is not a clean tree
+        print("crew_proofs: git %s failed (%s)" % (" ".join(args), exc), file=sys.stderr)
+        return None
+    if p.returncode != 0:
+        print("crew_proofs: git %s exited %d" % (" ".join(args), p.returncode), file=sys.stderr)
+        return None
+    return [x for x in p.stdout.split() if x]
 
 
 def changed_since(rev):
@@ -130,11 +146,15 @@ def changed_since(rev):
     if committed_only:
         rev = rev.split(":", 1)[1]
     args = ["diff", "--name-only", rev, "HEAD"] if committed_only else ["diff", "--name-only", rev]
-    names = {os.path.basename(x) for x in _git_lines(args)}
-    if not committed_only and rev != "HEAD":
-        names |= {os.path.basename(x) for x in _git_lines(["diff", "--name-only", rev, "HEAD"])}
-    if names is None:
+    lines = _git_lines(args)
+    if lines is None:
         return None
+    names = {os.path.basename(x) for x in lines}
+    if not committed_only and rev != "HEAD":
+        more = _git_lines(["diff", "--name-only", rev, "HEAD"])
+        if more is None:
+            return None
+        names |= {os.path.basename(x) for x in more}
     known = set(candidates())
     picked = [n for n in known if n in names]
     for stem in {os.path.splitext(n)[0] for n in names if n.endswith(".py") and n not in known}:
