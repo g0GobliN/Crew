@@ -81,10 +81,14 @@ def _home_vars(env):
     for key in ("USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "HOME"):
         if not env.get(key) and os.environ.get(key):
             env[key] = os.environ[key]
-    if not env.get("HOME") and env.get("USERPROFILE"):
-        env["HOME"] = env["USERPROFILE"]
-    if not env.get("USERPROFILE") and env.get("HOME"):
-        env["USERPROFILE"] = env["HOME"]
+    if sys.platform == "win32":
+        # Windows expanduser/Path.home reads USERPROFILE (HOME too, for POSIX-style callers), and a native
+        # Windows process starts with neither in the scrub. Cross-fill them only here: on POSIX a HOME->
+        # USERPROFILE copy would hand every child a bogus Windows username.
+        if not env.get("HOME") and env.get("USERPROFILE"):
+            env["HOME"] = env["USERPROFILE"]
+        if not env.get("USERPROFILE") and env.get("HOME"):
+            env["USERPROFILE"] = env["HOME"]
     return env
 
 

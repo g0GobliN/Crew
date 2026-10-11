@@ -1,9 +1,12 @@
-"""The dashboard server names its host with platform.node(), not os.uname() (absent off POSIX), and the
-installer honours HERMES_BIN the way scripts/crew_card.py already does."""
+"""The dashboard server names its host with platform.node(), not os.uname() (absent off POSIX), the
+installer honours HERMES_BIN the way scripts/crew_card.py already does, and the two Windows helpers in
+the plugin - _which_hermes (skip a PATH hit this OS cannot run) and crew_safety._home_vars (keep a home
+the child can read, without inventing one on POSIX) - pick the right answer on every platform."""
 import importlib.util
 import os
 import platform
 import sqlite3
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -79,6 +82,76 @@ class HermesBin(unittest.TestCase):
         card = load("crew_card_bin", os.path.join("scripts", "crew_card.py"))
         os.environ["HERMES_BIN"] = "/opt/hermes/bin/hermes"
         self.assertEqual(self.mod.hermes_bin(), card.hermes_bin())
+
+
+def touch(d, name, size):
+    p = os.path.join(d, name)
+    with open(p, "wb") as fh:
+        fh.write(b"x" * size)
+    return p
+
+
+class WhichHermes(unittest.TestCase):
+    """_which_hermes walks PATH by PATHEXT and returns the first hermes this OS can run, falling back to
+    shutil.which. The win32 branch is exercised on any runner by patching sys.platform and os.pathsep."""
+
+    def setUp(self):
+        self.mod = load("crew_pkg_which", "__init__.py")
+
+    def _win32(self, path, pathext):
+        return (mock.patch.object(sys, "platform", "win32"),
+                mock.patch.object(os, "pathsep", ";"),
+                mock.patch.dict(os.environ, {"PATH": path, "PATHEXT": pathext}))
+
+    def test_skips_zero_byte_stub_and_walks_pathext(self):
+        stub = touch(tempfile.mkdtemp(), "hermes.exe", 0)     # the System32 stub that used to lead PATH
+        good = touch(tempfile.mkdtemp(), "hermes.exe", 10)    # the real bin/hermes.exe behind it
+        cm = self._win32(";".join([os.path.dirname(stub), os.path.dirname(good)]), ".EXE;.CMD;.BAT")
+        with cm[0], cm[1], cm[2]:
+            self.assertEqual(self.mod._which_hermes(), good)
+
+    def test_walks_pathext_to_a_runnable_launcher(self):
+        d = tempfile.mkdtemp()
+        cmd = touch(d, "hermes.cmd", 5)
+        touch(d, "hermes", 5)                                 # POSIX script, no runnable ext: ignored on win32
+        cm = self._win32(d, ".EXE;.CMD;.BAT")
+        with cm[0], cm[1], cm[2]:
+            self.assertEqual(self.mod._which_hermes(), cmd)
+
+    def test_falls_back_to_shutil_which(self):
+        cm = self._win32(tempfile.mkdtemp(), ".EXE;.BAT")
+        with cm[0], cm[1], cm[2], mock.patch.object(self.mod.shutil, "which", return_value="/usr/bin/hermes"):
+            self.assertEqual(self.mod._which_hermes(), "/usr/bin/hermes")
+
+
+class HomeVars(unittest.TestCase):
+    """crew_safety._home_vars keeps a home the child's Path.home() reads, but cross-fills USERPROFILE only
+    on Windows: on POSIX a copied HOME would hand every proof and coordinator child a bogus username."""
+
+    def setUp(self):
+        self.mod = load("crew_safety_home", os.path.join("scripts", "crew_safety.py"))
+
+    def _env(self, platform_name, parent, child):
+        with mock.patch.object(sys, "platform", platform_name), \
+             mock.patch.dict(os.environ, parent, clear=True):
+            return self.mod._home_vars(dict(child))
+
+    def test_win32_home_from_userprofile(self):
+        env = self._env("win32", {}, {"USERPROFILE": "C:\\Users\\thana"})
+        self.assertEqual(env.get("HOME"), "C:\\Users\\thana")
+
+    def test_win32_userprofile_from_home(self):
+        env = self._env("win32", {}, {"HOME": "C:\\Users\\thana"})
+        self.assertEqual(env.get("USERPROFILE"), "C:\\Users\\thana")
+
+    def test_win32_pulls_systemroot_from_parent(self):
+        env = self._env("win32", {"SYSTEMROOT": "C:\\Windows"}, {})
+        self.assertEqual(env.get("SYSTEMROOT"), "C:\\Windows")
+
+    def test_posix_does_not_invent_userprofile(self):
+        env = self._env("linux", {}, {"HOME": "/home/crew"})
+        self.assertEqual(env.get("HOME"), "/home/crew")
+        self.assertNotIn("USERPROFILE", env)
 
 
 if __name__ == "__main__":

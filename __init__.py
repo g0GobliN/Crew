@@ -447,10 +447,11 @@ def _graph_script():
 
 def _utf8_env():
     """Child env that prints box-drawing and arrows as UTF-8: a Windows console defaults to the locale
-    codec (cp1253 here), which cannot encode them and kills the graph mid-print."""
+    codec (cp1253 here), which cannot encode them and kills the graph mid-print. Assign, never setdefault:
+    a parent that already exported PYTHONIOENCODING=cp1253 would otherwise pass it straight through."""
     env = dict(os.environ)
-    env.setdefault("PYTHONIOENCODING", "utf-8")
-    env.setdefault("PYTHONUTF8", "1")
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
     return env
 
 
