@@ -29,6 +29,17 @@ import secrets
 import sys
 import subprocess
 import threading
+
+def node_name():
+    """Board machine label: os.uname is POSIX-only, COMPUTERNAME covers Windows."""
+    name = os.environ.get("COMPUTERNAME")
+    if name:
+        return name
+    try:
+        return os.uname().nodename
+    except AttributeError:
+        return "unknown"
+
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
@@ -242,7 +253,7 @@ def board_data(include_all=False, older=False):
     counts = {}
     for t in tiles:
         counts[t["status"]] = counts.get(t["status"], 0) + 1
-    return {"generated_at": int(now), "node": os.uname().nodename,
+    return {"generated_at": int(now), "node": node_name(),
             "live": sum(1 for t in tiles if t["active"]), "lanes": lanes, "counts": counts,
             "cards": len(tiles), "test_cards": len(test_cards),
             "attention": attention_data(db, tiles, now)}
@@ -427,7 +438,7 @@ def board_page(include_all=False, nonce=None):
             % (CG.favicon_link(), css, CG.logo_link(), cards_word(data.get("cards")), live_word(data.get("live")),
                board_counts(data.get("counts")), notes_hint(data.get("attention")),
                BELL_SVG, notes_total(data.get("attention")), attention_head(data.get("attention")),
-               esc(os.uname().nodename), esc(CG.crew_card.dashboard_url()),
+               esc(node_name()), esc(CG.crew_card.dashboard_url()),
                (' nonce="%s"' % esc(nonce)) if nonce else "", js_data(data),
                CG.dashboard_asset("lib.js", "board.js")))
 

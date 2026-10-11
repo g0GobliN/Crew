@@ -78,7 +78,31 @@ COMMANDS = [
 
 
 def _hermes_bin():
-    return os.environ.get("HERMES_BIN") or shutil.which("hermes") or "hermes"
+    return os.environ.get("HERMES_BIN") or _which_hermes() or "hermes"
+
+
+def _which_hermes():
+    """The first `hermes` on PATH this OS can actually run.
+
+    On Windows PATH can lead with a 0-byte stub or the POSIX launcher script, and either makes every
+    `hermes config get` fail silently - the plugin then reads config as None."""
+    exts = [e.lower() for e in os.environ.get("PATHEXT", ".EXE;.CMD;.BAT").split(os.pathsep)]
+    runnable = (".exe", ".cmd", ".bat")
+    for entry in os.environ.get("PATH", "").split(os.pathsep):
+        if not entry:
+            continue
+        for ext in (exts or [""]):
+            cand = os.path.join(entry, "hermes" + ext)
+            try:
+                if not (os.path.isfile(cand) and os.path.getsize(cand) > 0):
+                    continue
+            except OSError:
+                continue
+            if sys.platform == "win32":
+                if os.path.splitext(cand)[1].lower() not in runnable:
+                    continue
+            return cand
+    return shutil.which("hermes")
 
 
 def _tasks_db():
@@ -186,12 +210,13 @@ def _cmd_maintenance(action, rest):
         return "%s not found - run install.py --check" % script
     try:
         r = subprocess.run([sys.executable, path] + [a for a in (rest or "").split() if a],
-                           capture_output=True, text=True, timeout=timeout)
+                           capture_output=True, text=True, errors="replace",
+                           timeout=timeout, env=_utf8_env())
     except subprocess.TimeoutExpired:
         return "%s timed out after %ds" % (action, timeout)
     except Exception as exc:  # noqa: BLE001 - a pass must never break the chat turn
         return "%s failed: %s" % (action, exc)
-    out = (r.stdout + r.stderr).strip()
+    out = ((r.stdout or "") + (r.stderr or "")).strip()
     if not out:
         return "%s: nothing to do (exit %d)" % (action, r.returncode)
     return out if r.returncode == 0 else "%s (exit %d):\n%s" % (action, r.returncode, out)
@@ -427,18 +452,28 @@ def _graph_script():
     return _script_path("crew_graph.py")
 
 
+def _utf8_env():
+    """Child env that prints box-drawing and arrows as UTF-8: a Windows console defaults to the locale
+    codec (cp1253 here), which cannot encode them and kills the graph mid-print."""
+    env = dict(os.environ)
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    env.setdefault("PYTHONUTF8", "1")
+    return env
+
+
 def _run_graph(args, timeout=120):
     script = _graph_script()
     if not script:
         return None, "crew_graph.py not found - run install.py --check"
     cmd = [sys.executable, script] + list(args)
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+                           timeout=timeout, env=_utf8_env())
     except subprocess.TimeoutExpired:
         return None, "crew graph timed out"
     except Exception as exc:
         return None, "crew graph failed: %s" % exc
-    return r.returncode, (r.stdout + r.stderr).strip()
+    return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
 
 
 def _fence(s):
@@ -1583,6 +1618,11 @@ def register(ctx):
             description=desc,
             args_hint=hint,
         )
+
+
+
+    # `/crew` is the intake SKILL, never a plugin command: dispatch tries plugin commands before
+    # skills, so a command named `crew` shadows the skill and the intake never runs.
     ctx.register_hook("pre_tool_call", crew_tool_guard)
     ctx.register_hook("post_api_request", crew_budget_account)
     ctx.register_hook("api_request_error", crew_quota_reroute)

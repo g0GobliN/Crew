@@ -74,6 +74,20 @@ def _venv_deps():
             sys.path.append(site)
 
 
+def _home_vars(env):
+    """Keep a home the child's `Path.home()` can read. The scrub carries HOME (a native Windows process
+    never sets it) and drops USERPROFILE/SYSTEMROOT (a native Windows process always has them), and a child
+    with neither dies in expanduser before it can load its profile."""
+    for key in ("USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT", "HOME"):
+        if not env.get(key) and os.environ.get(key):
+            env[key] = os.environ[key]
+    if not env.get("HOME") and env.get("USERPROFILE"):
+        env["HOME"] = env["USERPROFILE"]
+    if not env.get("USERPROFILE") and env.get("HOME"):
+        env["USERPROFILE"] = env["HOME"]
+    return env
+
+
 def proof_env(extra=None):
     """The environment a proof (and the coordinator's own subprocesses) runs with: Hermes's scrubbed child env,
     plus the few variables the crew scripts need to find the board. Never os.environ as it is."""
@@ -84,6 +98,7 @@ def proof_env(extra=None):
     except Exception:  # noqa: BLE001 - no Hermes: the smallest env that still runs a shell command
         env = {k: v for k, v in os.environ.items() if k in ENV_KEEP or k.startswith("CREW_")}
     env.update({k: os.environ[k] for k in ENV_KEEP if k in os.environ})
+    _home_vars(env)
     env.update(extra or {})
     return env
 
