@@ -20,7 +20,7 @@ from pathlib import Path
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(TESTS)
-sys.path.insert(0, os.path.join(REPO, "dev"))
+sys.path.insert(0, os.path.join(REPO, "scripts"))
 
 import git_safe  # noqa: E402
 

@@ -40,8 +40,7 @@ import crew_proof_board  # noqa: E402
 
 # Hardened git: this runner reads revisions out of the checkout, and a repository's own config must
 # never run a program for us (the GitSpawn class - core.fsmonitor, hooks, filter drivers). The
-# helper sits in the tooling dir beside this one; see git_safe.py for what it pins.
-sys.path.insert(0, os.path.join(os.path.dirname(HERE), "dev"))
+# helper sits in scripts/ beside this one; see git_safe.py for what it pins.
 import git_safe  # noqa: E402
 
 # Proofs that need something outside this box: a desktop session, a chat round trip.
