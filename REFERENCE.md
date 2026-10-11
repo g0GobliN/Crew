@@ -42,6 +42,11 @@ run at any time.
 - `--no-service`    do not write/enable the `crew-graph-http.service` user unit
 - `--no-cron`       do not register the nightly proofs cron or retire the old heal and observer crons
 - `--nightly-proofs` register the 03:00 proofs cron and its shim in `<profile>/scripts/` (off by default)
+
+> Native Windows has neither systemd nor user cron: install with `--no-service --no-cron`, run
+> `scripts/crew_graph_serve.py` for the dashboard, and schedule proofs with Task Scheduler if you want
+> them. See [WINDOWS.md](WINDOWS.md).
+
 - `--proofs-deliver TARGET`  where the nightly proofs report a failure (default `local`)
 - `--chat-kanban`   enable the kanban toolset on the profile's zulip and telegram platforms (off by default)
 - `--telegram-menu` put the crew commands first in the Telegram command menu (off by default)
