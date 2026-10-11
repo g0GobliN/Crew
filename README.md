@@ -15,7 +15,7 @@
 ![Verified results](https://img.shields.io/badge/-verified%20results-161b22?style=flat-square)
 ![Self-hosted](https://img.shields.io/badge/-self--hosted-161b22?style=flat-square)
 
-[Website](https://crew.forgecoreai.com) · [Watch the 53 s film](https://crew.forgecoreai.com/#board) · [Install](#install) · [Reference](REFERENCE.md)
+[Website](https://crew.forgecoreai.com) · [Watch the 53 s film](https://crew.forgecoreai.com/#board) · [Install](#install) · [Commercial](#commercial-services) · [Reference](REFERENCE.md)
 
 ---
 
@@ -44,6 +44,12 @@ result back in the same chat, or one concrete question when it truly needs you.
 | **Hard budgets** | Every card carries a token budget; a run that reaches it stops instead of burning on. |
 | **See everything** | A local dashboard shows every card, run, session, tool call and verdict, live. |
 | **Self-hosted** | Runs inside your own Hermes, on your own machine. No telemetry. |
+
+## Commercial Services
+
+Crew is free and open source, Apache-2.0. If you use it in an enterprise and would benefit from
+commercial support, additional tooling, or managed model spending, write to
+[crew@forgecoreai.com](mailto:crew@forgecoreai.com).
 
 ## Install
 
