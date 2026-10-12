@@ -50,6 +50,9 @@ machine. Without Git for Windows the proof does not run and reports `Git Bash wa
 crew proofs run in Git Bash on Windows (install Git for Windows); the proof was not run`. Checking whether a
 worker process is alive, and stopping or parking a card, work natively too (`OpenProcess` and `taskkill /T /F`).
 
+If you use Hermes Desktop, crew's Crew page needs no dashboard server; see
+[Crew in Hermes Desktop](README.md#crew-in-hermes-desktop) for which profile to install into.
+
 ### 2. Run the dashboard without systemd
 
 The server binds `127.0.0.1:8799` (override with `CREW_GRAPH_PORT` / `CREW_GRAPH_BIND`):

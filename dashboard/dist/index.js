@@ -106,7 +106,7 @@
       },
         h("h3", { style: { margin: "0 0 1rem", fontSize: "1.25rem" } }, "Crew Dashboard Unavailable"),
         h("p", { style: { margin: "0 0 1.5rem", opacity: 0.8, fontSize: "0.875rem", lineHeight: 1.5 } },
-          "Could not load the Crew board (" + error + "). Make sure the crew daemon is running on 127.0.0.1:8799."
+          "Could not load the Crew board (" + error + "). See the Hermes server log for the error."
         ),
         h("button", {
           onClick: page === "board" ? loadPage : function () { setPage("board"); },

@@ -15,7 +15,7 @@
 ![Verified results](https://img.shields.io/badge/-verified%20results-161b22?style=flat-square)
 ![Self-hosted](https://img.shields.io/badge/-self--hosted-161b22?style=flat-square)
 
-[Website](https://crew.forgecoreai.com) · [Watch the 53 s film](https://crew.forgecoreai.com/#board) · [Install](#install) · [Windows](WINDOWS.md) · [Commercial](#commercial-services) · [Reference](REFERENCE.md)
+[Website](https://crew.forgecoreai.com) · [Watch the 53 s film](https://crew.forgecoreai.com/#board) · [Install](#install) · [Windows](WINDOWS.md) · [Hermes Desktop](#crew-in-hermes-desktop) · [Commercial](#commercial-services) · [Reference](REFERENCE.md)
 
 ---
 
@@ -116,6 +116,33 @@ Only when you ask for it:
 The installer reports shell hooks your profiles declare but you have not approved. It never approves them:
 review them with `hermes -p P hooks list` and confirm them at Hermes's own prompt.
 
+## Crew in Hermes Desktop
+
+Hermes Desktop gets a **Crew** page in its sidebar: the crew board and each card's page (steps, findings, proof,
+verdict), the same pages as the browser dashboard, with the acknowledge buttons. It needs no separate
+server and no systemd, so it works on Windows too.
+
+Desktop starts one backend, for the profile it was launched with, and loads the page's data from that profile's
+`plugins/` folder plus the Hermes root `plugins/` folder.
+
+**Setting this up with an agent?** Run `hermes profile list` to see the profiles, then read the Hermes docs on
+[Desktop profiles](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#sessions--profiles) and
+[profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles).
+
+**Quick start**
+
+1. Install crew as in [Install](#install): `hermes plugins install macd2/Crew`, then
+   `python3 ~/.hermes/plugins/crew/install.py --profile NAME` (on Windows see [WINDOWS.md](WINDOWS.md)).
+2. Install crew into the profile you use in Desktop (with one profile, that is `default`). If you switch profile in
+   the app's profile rail, Desktop remembers it and uses it from the next launch, so restart Desktop after
+   switching and the Crew page follows. The installer copies `desktop/plugin.js` and `dashboard/plugin_api.py`
+   with the rest of the plugin. If the Crew page later says `Crew could not load: 404 Not Found`, Desktop is
+   running a profile that has no crew: install it there.
+3. The installer already runs `hermes plugins enable crew` and enables the kanban toolset for `NAME`. In Desktop,
+   open **Settings > Plugins**, press **Rescan**, and check that **Crew** is switched on (switching the agent
+   half on also switches its Desktop half on).
+4. Open **Crew** in the sidebar: you see the crew board, and a click on a card opens its page.
+
 ## Use
 
 | Command | What it does |
@@ -138,13 +165,13 @@ then hermes -p NAME plugins doctor crew and fix anything it reports. Finish by s
 and tell me what it answered.
 ```
 
-## Lessons
+## Self-improvement
 
 What agents learn on a card lives in `<base home>/crew/lessons.md`, one dated line per lesson with the roles it
 applies to. It is never shipped and the installer and `crew_parity_check` leave it alone. Agents record a lesson
 with `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" lesson --role content,verifier --text "..."`
 (identical lessons are stored once; the newest 50 entries / 8 KB are kept); editing a crew skill with
-`skill_manage` is refused in every profile, because an installed skill is overwritten by the next install. The
+`skill_manage` is refused in every profile, because an installed skill is overwritten by the next install.
 The plugin adds a role's lessons (and the `all` ones) to that role's turn, and the `all` ones to `/crew`'s intake.
 An agent may not write `--role all` lessons (that is the owner's intake channel); it tags its own role and the
 owner promotes it. To make a lesson permanent, move it into the matching `skills/*/SKILL.md` in a release and delete it from the file.

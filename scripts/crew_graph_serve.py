@@ -5,7 +5,7 @@
   /board.json       the same board data, polled every 2s by the page; carries attention.rows
   POST /ack/<id>    clear ONE notification off the list (?undo=1 restores it)
   POST /ack/all     clear every listed notification at once (?undo=1 restores them); both writes go
-                    into $HERMES_HOME/crew/attention_acks.json - never into the board. POST only, and
+                    into <dir of the board's kanban.db>/crew/attention_acks.json (CREW_ACK_FILE overrides) - never into the board. POST only, and
                     only from a same-origin page: a GET answers 405, a cross-site Origin answers 403.
   /card/<id>        live flow graph for one card (polls /card/<id>.json every 2s)
   /card/<id>.json   the graph, rebuilt per request
@@ -262,14 +262,31 @@ STATE_KINDS = ("created", "blocked", "gave_up", "crashed", "timed_out", "status"
                "unblocked", "promoted", "review_requested", "changes_requested")
 
 
+def legacy_ack_path():
+    """Where acks lived before they belonged to the board: beside this plugin copy. Read only, never deleted."""
+    return os.path.join(os.path.dirname(HERE), "crew", "attention_acks.json")
+
+
 def ack_path():
-    return os.environ.get("CREW_ACK_FILE") or os.path.join(os.path.dirname(HERE), "crew",
-                                                           "attention_acks.json")
+    """CREW_ACK_FILE, else <dir of the active board's kanban.db>/crew/attention_acks.json: the acks belong to the board,
+    so two processes (daemon, dashboard plugin, any plugin copy) on one board share one file and two boards never do.
+    With no board file, the legacy plugin-side path."""
+    env = os.environ.get("CREW_ACK_FILE")
+    if env:
+        return env
+    db = CG.kanban_db_path()
+    if not db:
+        return legacy_ack_path()
+    return os.path.join(os.path.dirname(os.path.abspath(db)), "crew", "attention_acks.json")
 
 
 def load_acks():
+    """The board's acks; until it has its own file, the legacy plugin-side file (the first write copies it over)."""
+    path = ack_path()
+    if not os.path.exists(path) and not os.environ.get("CREW_ACK_FILE"):
+        path = legacy_ack_path()
     try:
-        with open(ack_path(), encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
@@ -583,6 +600,36 @@ def csp(nonce):
             "frame-ancestors 'none'" % ((" 'nonce-%s'" % nonce) if nonce else ""))
 
 
+def board_json(show_all=False, older=False):
+    """The /board.json body: one owner for the standalone server and the dashboard plugin."""
+    return json.dumps(board_data(show_all, older=older))
+
+
+def face_svg(role):
+    """The bytes of the face file a role shows (role_face), or None when there is none / it cannot be read.
+    The name comes from role_face, never from a path in the URL."""
+    name = role_face(role)
+    try:
+        with open(os.path.join(AVATAR_DIR, name or ""), "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def card_response(rest, nonce):
+    """(code, body, content type) for /card/<rest>: the page, or with a .json suffix the graph JSON.
+    One owner for the standalone server and the dashboard plugin."""
+    if rest.endswith(".json"):
+        graph, err = CG.build_graph(rest[:-len(".json")])
+        if err:
+            return 404, json.dumps({"error": err}), "application/json"
+        return 200, json.dumps(graph), "application/json"
+    graph, err = CG.build_graph(rest)
+    if err:
+        return 404, "no graph for %s (%s)" % (esc(rest), esc(err)), "text/html; charset=utf-8"
+    return 200, CG.render_html(graph, "/card/%s.json" % rest, nonce), "text/html; charset=utf-8"
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "crew-graph"
 
@@ -658,31 +705,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, board_page(show_all, nonce), "text/html; charset=utf-8", nonce)
         if path in ("/board.json", "/index.json"):
             older = "older=1" in (urlparse(self.path).query or "")
-            return self._send(200, json.dumps(board_data(show_all, older=older)), "application/json")
+            return self._send(200, board_json(show_all, older), "application/json")
         if path.startswith("/ack/"):
             return self._send(405, "use POST\n", "text/plain; charset=utf-8", extra=(("Allow", "POST"),))
         m = FACE_RX.match(path)
         if m:   # a role's face: the shipped file the role was given (role_face), never a path from the URL
-            name = role_face(m.group(1))
-            try:
-                with open(os.path.join(AVATAR_DIR, name or ""), "rb") as fh:
-                    return self._send(200, fh.read(), "image/svg+xml")
-            except OSError:
+            svg = face_svg(m.group(1))
+            if svg is None:
                 return self._send(404, "not found\n", "text/plain; charset=utf-8")
+            return self._send(200, svg, "image/svg+xml")
         if path.startswith("/card/"):
-            rest = path[len("/card/"):]
-            if rest.endswith(".json"):
-                card = rest[:-len(".json")]
-                graph, err = CG.build_graph(card)
-                if err:
-                    return self._send(404, json.dumps({"error": err}), "application/json")
-                return self._send(200, json.dumps(graph), "application/json")
-            graph, err = CG.build_graph(rest)
-            if err:
-                return self._send(404, "no graph for %s (%s)" % (esc(rest), esc(err)),
-                                  "text/html; charset=utf-8", nonce)
-            html = CG.render_html(graph, "/card/%s.json" % rest, nonce)
-            return self._send(200, html, "text/html; charset=utf-8", nonce)
+            code, body, ctype = card_response(path[len("/card/"):], nonce)
+            return self._send(code, body, ctype, nonce if ctype.startswith("text/html") else None)
         return self._send(404, "not found\n", "text/plain; charset=utf-8")
 
     def log_message(self, fmt, *args):
