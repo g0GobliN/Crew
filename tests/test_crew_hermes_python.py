@@ -13,7 +13,7 @@ import crew_card  # noqa: E402
 
 
 def _py(venv):
-    p = Path(venv) / "bin" / "python"
+    p = Path(venv).joinpath(*(("Scripts", "python.exe") if crew_card.IS_WINDOWS else ("bin", "python")))
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("", encoding="utf-8")
     return str(p)

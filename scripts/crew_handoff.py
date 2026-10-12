@@ -19,7 +19,8 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
-KANBAN_DB = os.environ.get("KANBAN_DB", os.path.expanduser("~/.hermes/kanban.db"))
+import crew_card  # noqa: E402 - the one writer of a crew event, and where Hermes's default board lives
+KANBAN_DB = os.environ.get("KANBAN_DB", os.path.join(crew_card.default_home(), "kanban.db"))
 MAX_COMMENTS = 4
 MAX_WORKSPACE_ENTRIES = 12
 
@@ -110,7 +111,6 @@ def record_handoff(card_id, text):
         conn.close()
     if dup:
         return False
-    import crew_card        # the crew's one event writer (appends a crew-kind row; no state change)
     return crew_card._append_card_event(card_id, "handoff", {
         "run": run, "chars": len(text or ""), "profile": os.environ.get("CREW_PROFILE") or "",
         "ts": time.time()}, run_id=run, db=KANBAN_DB)

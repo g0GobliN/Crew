@@ -23,7 +23,6 @@ script on a card records its sha256 on the card, and a later run of a changed sc
 refusal (`SCRIPT_CHANGED`) and the coordinator decides (crew_coordinator `revise_script`: it may accept the script or
 have the verifier rewrite it, with a reason on record); the writer never writes or changes a proof script.
 """
-import glob
 import hashlib
 import os
 import re
@@ -37,7 +36,6 @@ PROOF_MODES = ("safe", "brave")
 APPROVED = "approved"            # a mode only proof_mode() returns: safe, but this exact command has the owner's yes
 BLOCKED_RC = 126                 # what a shell says for "found but refused"; Result.blocked carries the reason
 ENV_KEEP = ("PATH", "HOME", "LANG", "HERMES_HOME", "HERMES_KANBAN_DB", "HERMES_KANBAN_BOARD", "TMPDIR")
-HERMES_SRC = (os.environ.get("HERMES_AGENT_SRC") or "", os.path.expanduser("~/.hermes/hermes-agent"))
 
 Result = namedtuple("Result", "rc out blocked")
 SCRIPT_CHANGED = "proof script changed since it first ran: "     # the prefix crew_coordinator.proof_blocked_ask keys on
@@ -58,9 +56,19 @@ def _script_file(path):
 
 
 def git_bash():
-    """The bash a proof runs under on Windows: Git for Windows' own, found from git.exe. Never a bare `bash` on
-    PATH (C:\\Windows\\System32\\bash.exe is WSL's, a different machine with different paths), never cmd.exe.
-    '' when Git Bash is not installed."""
+    """The bash a proof runs under on Windows: the one Hermes itself runs commands in. HERMES_GIT_BASH_PATH, then the
+    PortableGit Hermes's installer puts under <Hermes home>\\git (bin\\bash.exe, MinGit's usr\\bin\\bash.exe),
+    then Git for Windows' own, found from git.exe. Never a bare `bash` on PATH (C:\\Windows\\System32\\bash.exe is
+    WSL's, a different machine with different paths), never cmd.exe. '' when no Git Bash is installed."""
+    import crew_card
+    custom = os.environ.get("HERMES_GIT_BASH_PATH") or ""
+    if custom and os.path.isfile(custom):
+        return custom
+    for root in (crew_card.base_home(), crew_card.default_home()):
+        for rel in (("git", "bin", "bash.exe"), ("git", "usr", "bin", "bash.exe")):
+            cand = os.path.join(root, *rel)
+            if os.path.isfile(cand):
+                return cand
     git = shutil.which("git")
     if not git:
         return ""
@@ -76,8 +84,10 @@ def git_bash():
 def _hermes():
     """Make Hermes's own modules importable (the crew scripts run under any python): its source root goes on
     the path whole, because an editable install exposes the packages but not top-level modules like hermes_yaml.
-    Raises ImportError when there is no Hermes."""
-    for src in HERMES_SRC:
+    The root is HERMES_AGENT_SRC, else crew_card.hermes_root() (this Hermes home's hermes-agent, which on a native
+    Windows install is <%LOCALAPPDATA%\\hermes>\\hermes-agent). Raises ImportError when there is no Hermes."""
+    import crew_card
+    for src in (os.environ.get("HERMES_AGENT_SRC") or "", crew_card.hermes_root()):
         if src and os.path.isdir(src) and src not in sys.path:
             sys.path.append(src)
     _venv_deps()
@@ -97,8 +107,7 @@ def _venv_deps():
     py = crew_card.hermes_python()
     if not py:
         return
-    pattern = os.path.join(os.path.dirname(os.path.dirname(py)), "lib", "python*", "site-packages")
-    for site in sorted(glob.glob(pattern)):
+    for site in crew_card.venv_site_packages(os.path.dirname(os.path.dirname(py))):
         if site not in sys.path:
             sys.path.append(site)
 

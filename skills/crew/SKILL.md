@@ -114,7 +114,7 @@ Write the proof command, do NOT run it, test it or iterate on it in the intake. 
 
 - Command-only proof: one short plain command (`test -f <file> && grep -q "..." <file>`, `curl -sf ...`). You write
   it, the owner confirms it, the card stays `Verify: proof` (the writer runs it, the coordinator audits).
-- Script proof: `python3 <landing folder>/.crew/<YYYYMMDD-HHMMSS>-<slug>/verify.py`, absolute path: a folder of its
+- Script proof: `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" <landing folder>/.crew/<YYYYMMDD-HHMMSS>-<slug>/verify.py`, absolute path: a folder of its
   own under `.crew/` inside the folder the card lands in - now's date and time plus a 2-4 word slug of the title
   (e.g. `.crew/20261003-143201-healthcare-landing/verify.py`), so two cards in one folder never share a script
   (the plugin refuses a script another open card uses). Use it when the proof needs several checks. Write `Verify: independent` (the plugin sets it
@@ -148,7 +148,7 @@ Units: <unit one>|<unit two>
 
 Proofs run unattended, so the owner confirms the exact command and picks how careful crew is. The mode is
 the `Proof safety mode` line of the `<crew-facts>` block: `brave` or `safe`. Only when that block is missing,
-run `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" safety` (it prints the same word).
+run `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py safety` (it prints the same word).
 
 - `brave`: the owner set it for good (`/crew-safety brave`). Do NOT ask. Write `Proof mode: brave`.
 - `safe`: ask it as ONE `clarify` question in the same batch as the other questions, the two options as
@@ -168,7 +168,7 @@ choices:
 
 ### Flagged proofs - checked here, so the card never stops mid-run to ask
 
-Before the safety question, run `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" proof-check --command '<the proof command>'`
+Before the safety question, run `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py proof-check --command '<the proof command>'`
 (read-only; it does not run the command). It prints one line:
 
 - `ok`: nothing more to ask.
@@ -190,7 +190,7 @@ the turn - no "Me:/You:" list, no recap of the contract, no other text beyond th
 line the plugin asks for at the top of the turn:
 
 ```
-terminal(background=true, notify_on_complete=true, command='python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" watch --card <id>')
+terminal(background=true, notify_on_complete=true, command='sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py watch --card <id>')
 ```
 
 ```
@@ -203,7 +203,7 @@ its output comes back into this session as a new turn: relay it to the owner in 
 No other waiting, no follow-up card, no extra writer, no retry. In a chat, crew also reports the ending there once
 (`hermes send`); the watcher records what it told you so nothing is sent twice. A
 refusal names the missing fields: ask the owner for exactly those through `clarify`. Independent parts
-with different artifacts go through `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" plan --spec <plan.json>`
+with different artifacts go through `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py plan --spec <plan.json>`
 instead (at most 6 children, never two writers on one artifact; the tool refuses an incomplete child).
 
 ## Never
@@ -224,4 +224,4 @@ instead (at most 6 children, never two writers on one artifact; the tool refuses
   about 2000 characters of pasted text under `Inputs`.
 - Ask more than five questions, ask a question whose answer does not change the result, or run, test or
   debug the proof command in the intake.
-- Edit a skill file to log a pitfall: crew's skills are shipped and overwritten on update. Record it with `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" lesson --role <role> --text "..."`.
+- Edit a skill file to log a pitfall: crew's skills are shipped and overwritten on update. Record it with `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py lesson --role <role> --text "..."`.

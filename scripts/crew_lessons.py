@@ -28,10 +28,19 @@ ENTRY_RX = re.compile(r"^- (\d{4}-\d{2}-\d{2}) \[([a-z,]+)\] (.+)$")
 
 
 def _base_home():
-    h = os.path.abspath(os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes"))
-    if os.path.basename(os.path.dirname(h)) == "profiles":
-        return os.path.dirname(os.path.dirname(h))
-    return h
+    """crew_card.base_home(), the one resolver (it knows Windows' %LOCALAPPDATA%\\hermes default). This module is
+    loaded by file path inside the Hermes process, so its siblings are not importable by name until the scripts
+    directory is on sys.path for the length of the import."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    added = here not in sys.path
+    if added:
+        sys.path.insert(0, here)
+    try:
+        import crew_card
+    finally:
+        if added and here in sys.path:
+            sys.path.remove(here)
+    return crew_card.base_home()
 
 
 def path():

@@ -20,6 +20,7 @@ command the verifier can run and a token budget.
       prints only the contract fields of a card (what the verifier may read).
 """
 import argparse
+import glob
 import json
 import os
 import re
@@ -50,8 +51,23 @@ OUTPUT_KEEP = 4000
 SELF = os.path.abspath(__file__).replace(os.sep, "/") if os.name == "nt" else os.path.abspath(__file__)
 
 
+IS_WINDOWS = os.name == "nt"     # a name of its own so a test can pin the Windows layout on Linux
+# How a bash command line (a proof, a worker's instruction) names the interpreter that runs crew's scripts. Windows
+# has no `python3`: it is the interpreter running this script, quoted, with forward slashes (Git Bash reads those).
+PYTHON = '"%s"' % sys.executable.replace("\\", "/") if IS_WINDOWS else "python3"
+
+
+def default_home():
+    """Hermes's platform default home when HERMES_HOME is unset (hermes_constants._get_platform_default_hermes_home):
+    %LOCALAPPDATA%\\hermes on native Windows, ~/.hermes everywhere else. The one place crew names that default."""
+    if IS_WINDOWS:
+        local = (os.environ.get("LOCALAPPDATA") or "").strip()
+        return os.path.join(local or os.path.join(os.path.expanduser("~"), "AppData", "Local"), "hermes")
+    return os.path.expanduser("~/.hermes")
+
+
 def hermes_home():
-    return os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
+    return os.environ.get("HERMES_HOME") or default_home()
 
 
 def base_home():
@@ -130,7 +146,11 @@ def dashboard_url():
 
 
 def hermes_bin():
-    return os.environ.get("HERMES_BIN") or shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    if IS_WINDOWS:      # the Windows installer's launcher dir; PATH may not carry it in a service or scheduled task
+        fallback = os.path.join(default_home(), "bin", "hermes.exe")
+    else:
+        fallback = os.path.expanduser("~/.local/bin/hermes")
+    return os.environ.get("HERMES_BIN") or shutil.which("hermes") or fallback
 
 
 def config_value(key, section="crew", home=None):
@@ -659,8 +679,8 @@ def render_body(c):
     if units:
         lines += ["", "Units (one entry each in $HERMES_HOME/crew/progress/<card>.json):"]
         lines += ["  - %s" % u for u in units]
-        lines += ["Mark a unit: python3 %s progress --card <card id> --unit \"<unit>\" --pass "
-                  "--evidence \"<raw evidence>\" [--by verifier]" % SELF]
+        lines += ["Mark a unit: %s %s progress --card <card id> --unit \"<unit>\" --pass "
+                  "--evidence \"<raw evidence>\" [--by verifier]" % (PYTHON, SELF)]
     lines += ["", "Done when: %s" % c["done_when"].strip()]
     if str(c.get("proof_cmd") or "").strip():
         lines += ["", "proof command: %s" % c["proof_cmd"].strip()]
@@ -688,10 +708,10 @@ def render_body(c):
             "the raw output, and the coordinator runs it once more after the card is done. kanban_complete is "
             "refused without a PASS line for the proof command. Two failed verifications hand the card back to the "
             "coordinator, who decides. Budget is a hard stop.",
-            "Finish: python3 %s verdict --card <this card id> (runs the proof command, writes "
+            "Finish: %s %s verdict --card <this card id> (runs the proof command, writes "
             "$HERMES_HOME/crew/verdicts/<card>.jsonl, exit 0 = PASS), then kanban_complete(summary=...) with the "
             "artifact paths and the raw proof output. No verifier session runs on this card; "
-            "kanban_request_review is refused." % SELF,
+            "kanban_request_review is refused." % (PYTHON, SELF),
         ]
     else:
         lines += [
@@ -702,9 +722,9 @@ def render_body(c):
             "refused without a PASS line for the proof command run by the verifier. Budget is a hard stop." % verifier,
             "Finish: run the proof command yourself, then kanban_request_review(summary=..., "
             "reviewer=\"%s\"). Never kanban_complete this card yourself." % verifier,
-            "Verifier, finish with: python3 %s verdict --card <this card id> (runs the proof, writes "
+            "Verifier, finish with: %s %s verdict --card <this card id> (runs the proof, writes "
             "$HERMES_HOME/crew/verdicts/<card>.jsonl, exit 0 = PASS). A verdict with no verdict file "
-            "does not count." % SELF,
+            "does not count." % (PYTHON, SELF),
         ]
     return "\n".join(lines) + "\n"
 
@@ -1007,10 +1027,28 @@ def _append_card_event(card_id, kind, payload, run_id=None, db=None):
 def hermes_root():
     """Hermes's source tree: HERMES_AGENT_DIR, HERMES_SRC (the proofs' name for it), this home's, then the default."""
     for path in (os.environ.get("HERMES_AGENT_DIR"), os.environ.get("HERMES_SRC"),
-                 os.path.join(base_home(), "hermes-agent"), os.path.expanduser("~/.hermes/hermes-agent")):
+                 os.path.join(base_home(), "hermes-agent"), os.path.join(default_home(), "hermes-agent")):
         if path and os.path.isdir(path):
             return path
-    return os.path.expanduser("~/.hermes/hermes-agent")
+    return os.path.join(default_home(), "hermes-agent")
+
+
+def venv_python(venv):
+    """The interpreter inside a venv directory ("" when it is not there): Scripts\\python.exe on Windows,
+    bin/python elsewhere. The one venv lookup; nothing else names either layout."""
+    rel = ("Scripts", "python.exe") if IS_WINDOWS else ("bin", "python")
+    py = os.path.join(str(venv), *rel)
+    return py if os.path.exists(py) else ""
+
+
+def venv_site_packages(venv):
+    """The site-packages directories of a venv directory: Lib\\site-packages on Windows,
+    lib/python*/site-packages elsewhere. Only ones that exist."""
+    if IS_WINDOWS:
+        found = [os.path.join(str(venv), "Lib", "site-packages")]
+    else:
+        found = sorted(glob.glob(os.path.join(glob.escape(str(venv)), "lib", "python*", "site-packages")))
+    return [p for p in found if os.path.isdir(p)]
 
 
 def hermes_python(root=None):
@@ -1025,8 +1063,8 @@ def hermes_python(root=None):
         from pm.environments import committed_venv
         venv = committed_venv(Path(root))
         if venv:
-            py = os.path.join(str(venv), "bin", "python")
-            if os.path.exists(py):
+            py = venv_python(venv)
+            if py:
                 return py
     except Exception:       # an older Hermes has no pm module; fall through to the legacy venvs
         pass
@@ -1034,8 +1072,8 @@ def hermes_python(root=None):
         if added and root in sys.path:
             sys.path.remove(root)
     for d in ("venv", ".venv"):
-        py = os.path.join(root, d, "bin", "python")
-        if os.path.exists(py):
+        py = venv_python(os.path.join(root, d))
+        if py:
             return py
     return ""
 
@@ -1387,7 +1425,7 @@ def run_plan(spec, dry_run=False, closeout_proof=None):
         made.append(open_card(ch, dry_run=dry_run, parents=[parent.get("id") or "PARENT"],
                               allow_no_proof=bool(closeout_proof)))
     close_parents = [m.get("id") or "CHILD" for m in made]
-    check = "python3 %s closeout --cards %s" % (SELF, ",".join(close_parents))
+    check = "%s %s closeout --cards %s" % (PYTHON, SELF, ",".join(close_parents))
     cproof = "%s && (%s)" % (check, closeout_proof) if closeout_proof else check
     # a split card's proof that runs a `.crew/` script is the verifier's like any such proof (coerce_verify): the
     # close-out card is `Verify: independent`, its run hands it to the verifier, who writes and runs the script
@@ -1395,9 +1433,9 @@ def run_plan(spec, dry_run=False, closeout_proof=None):
     finish = ("Do not run the proof yourself: its script is written by the verifier, not by you. kanban_request_review("
               "summary=\"every child card is done\", reviewer=\"%s\"). Never kanban_complete this card yourself."
               % role_profile("verifier") if independent else
-              "Run `python3 %s verdict --card $HERMES_KANBAN_TASK` (it runs the proof command and records the "
+              "Run `%s %s verdict --card $HERMES_KANBAN_TASK` (it runs the proof command and records the "
               "verdict). Exit 0: kanban_complete with its output. Otherwise kanban_block with kind 'transient' "
-              "and the output." % SELF)
+              "and the output." % (PYTHON, SELF))
     cbody = ("Role: coordinator\nCoordinator: %s\n\nGOAL: close out %s\n\n%s"
              "Done when: every child card is done and %s.\n\n"
              "proof command: %s\n\n%s\n"
@@ -1807,7 +1845,7 @@ def close_check(card_id, body, claimed_ts=None, verdicts=None):
     proof = [v for v in vs if (v.get("command") or "") == cmd]
     if not proof:
         return False, ("no verdict line for the card's proof command `%s` since the newest claim; run "
-                       "`python3 \"$HERMES_HOME/plugins/crew/scripts/crew_card.py\" verdict --card %s`" % (cmd[:120], card_id))
+                       "`sh \"$HERMES_HOME/plugins/crew/scripts/crew-run.sh\" crew_card.py verdict --card %s`" % (cmd[:120], card_id))
     if proof[-1]["verdict"] != "PASS":
         return False, "the newest run of the proof command `%s` is a FAIL (rc=%s)" % (cmd[:120], proof[-1].get("rc"))
     if vs[-1]["verdict"] != "PASS":
@@ -2490,6 +2528,10 @@ def reexec_under_hermes_python(script):
     # whose site-packages count, so the two must not compare equal.
     if py and os.path.abspath(py) != os.path.abspath(sys.executable):
         os.environ["CREW_REEXEC"] = "1"
+        if IS_WINDOWS:
+            # Windows has no exec: os.execv starts the new process and ends this one at once with status 0, so a
+            # caller waiting on this script (a proof running `verdict`) would see success before the work ran.
+            sys.exit(subprocess.call([py, script] + sys.argv[1:]))
         os.execv(py, [py, script] + sys.argv[1:])
 
 

@@ -216,7 +216,7 @@ def hermes_root():
     proof's), leaving HERMES_HOME real so the `hermes kanban` call still runs."""
     if os.environ.get("CREW_STOP_HERMES_ROOT"):
         return os.path.abspath(os.environ["CREW_STOP_HERMES_ROOT"])
-    home = os.path.abspath(os.environ.get("HERMES_HOME") or os.path.join(os.path.expanduser("~"), ".hermes"))
+    home = os.path.abspath(os.environ.get("HERMES_HOME") or crew_card.default_home())
     if os.path.basename(os.path.dirname(home)) == "profiles":
         return os.path.dirname(os.path.dirname(home))
     return home
@@ -236,7 +236,7 @@ def close_sessions(card_id, dry):
     asks a session whether it is running answers yes for ever.
     """
     closed, skipped = [], []
-    src = os.environ.get("HERMES_SRC") or os.path.expanduser("~/.hermes/hermes-agent")
+    src = os.environ.get("HERMES_SRC") or crew_card.hermes_root()
     if os.path.isdir(src) and src not in sys.path:
         sys.path.append(src)
     try:

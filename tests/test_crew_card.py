@@ -434,7 +434,7 @@ class SplitPlanTests(CardTestCase):
         self.assertEqual("", crew_card.proof_cmd(child["body"]))
         self.assertIsNone(child.get("model"))
         closeout = self.made[-1]
-        self.assertEqual("python3 %s closeout --cards %s && (%s)" % (crew_card.SELF, child["id"], self.PROOF),
+        self.assertEqual("%s %s closeout --cards %s && (%s)" % (crew_card.PYTHON, crew_card.SELF, child["id"], self.PROOF),
                          crew_card.proof_cmd(closeout["body"]))
 
     def test_a_split_child_closes_without_a_pass_line_and_a_normal_child_still_needs_one(self):
@@ -473,7 +473,7 @@ class SplitPlanTests(CardTestCase):
         self.assertIn("kanban_request_review", closeout)
         self.assertIn('reviewer="%s"' % crew_card.role_profile("verifier"), closeout)
         self.assertNotIn(" verdict --card", closeout)           # the coordinator never runs the verifier's script
-        self.assertEqual("python3 %s closeout --cards t_2 && (%s)" % (crew_card.SELF, script), crew_card.proof_cmd(closeout))
+        self.assertEqual("%s %s closeout --cards t_2 && (%s)" % (crew_card.PYTHON, crew_card.SELF, script), crew_card.proof_cmd(closeout))
         self.assertTrue(crew_card.needs_pass(closeout))
 
     def test_a_plain_proof_closeout_is_still_run_by_the_coordinator(self):

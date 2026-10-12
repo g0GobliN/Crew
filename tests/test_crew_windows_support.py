@@ -76,7 +76,9 @@ class HermesBin(unittest.TestCase):
         with mock.patch.object(self.mod.shutil, "which", return_value="/usr/bin/hermes"):
             self.assertEqual(self.mod.hermes_bin(), "/usr/bin/hermes")
         with mock.patch.object(self.mod.shutil, "which", return_value=None):
-            self.assertEqual(self.mod.hermes_bin(), os.path.expanduser("~/.local/bin/hermes"))
+            want = (os.path.join(self.mod.crew_card.default_home(), "bin", "hermes.exe") if os.name == "nt"
+                    else os.path.expanduser("~/.local/bin/hermes"))
+            self.assertEqual(self.mod.hermes_bin(), want)
 
     def test_matches_crew_card(self):
         card = load("crew_card_bin", os.path.join("scripts", "crew_card.py"))

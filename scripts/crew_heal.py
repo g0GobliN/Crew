@@ -29,7 +29,8 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import crew_result  # noqa: E402 - the words of the thrash stop's block reason
 import crew_safety  # noqa: E402 - the one runner of a proof command
-KANBAN_DB = os.environ.get("KANBAN_DB") or os.path.expanduser("~/.hermes/kanban.db")
+import crew_card  # noqa: E402 - the board and the Hermes home the defaults below come from
+KANBAN_DB = os.environ.get("KANBAN_DB") or os.path.join(crew_card.default_home(), "kanban.db")
 BLOCKER_WORDS = (r"quota", r"rate", r"429", r"403", r"forbidden", r"billing", r"subscription",
                  r"auth(?!or\b)", r"access denied", r"permission denied", r"invalid api key")
 # Matched from a word start, so "rate" cannot fire inside "moderate" and "auth" cannot fire inside

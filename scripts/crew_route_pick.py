@@ -64,7 +64,7 @@ def profile_default_model(profile=None):
     prof = profile or os.environ.get("CREW_ROLE_PROFILE") or ""
     if not prof:
         return None, None
-    cfg = os.path.expanduser("~/.hermes/profiles/%s/config.yaml" % prof)
+    cfg = os.path.join(crew_card.default_home(), "profiles", prof, "config.yaml")
     if not os.path.isfile(cfg):
         return None, None
     prov = model = None

@@ -316,7 +316,7 @@ class PlanTests(SafetyCase):
                  "proof_cmd": "true", "role": "worker", "proof_mode": "brave"}]})
         self.assertNotIn("proof_mode", opened[0])
         self.assertEqual("t_close", res["closeout"]["id"])
-        self.assertEqual("python3 %s closeout --cards t_child" % crew_card.SELF,
+        self.assertEqual("%s %s closeout --cards t_child" % (crew_card.PYTHON, crew_card.SELF),
                          crew_card.close_proof_command("t_close"))
 
 

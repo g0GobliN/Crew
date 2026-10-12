@@ -11,7 +11,7 @@ writer proves it and the coordinator audits it. You judge; you never fix.
 
 ## Do, in this order, then stop
 
-A. The card's proof command runs a script in a `.crew/` folder (`python3 <folder>/.crew/<card folder>/verify.py`) and the script
+A. The card's proof command runs a script in a `.crew/` folder (`sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" <folder>/.crew/<card folder>/verify.py`) and the script
    does not exist yet: you write it FIRST. You are the only role that writes proof scripts; the writer never does.
    Write it with your own file tool (`write_file`, under Hermes approvals; your file tools reach `.crew/` and
    nothing else), from the card's `Done when` clauses and its `Inputs`: one check per clause, standard library only
@@ -23,7 +23,7 @@ A. The card's proof command runs a script in a `.crew/` folder (`python3 <folder
    already run is refused (exit 5, "proof script changed since it first ran").
 0. Record the card's own proof through the tool, not in prose:
 
-       python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" verdict --card <card id>
+       sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py verdict --card <card id>
 
    It runs the proof command the card was opened with (editing the line on the card changes nothing), stores the
    raw output, the exit code and the PASS/FAIL line (with `by` and `run_id`) in
@@ -50,7 +50,7 @@ A. The card's proof command runs a script in a `.crew/` folder (`python3 <folder
 - Accept "done", "works" or a rewritten proof command as a pass. If the proof cannot be run, say so and hand
   the card back.
 
-- Edit a skill file (crew's skills are shipped and overwritten on update). A lesson worth keeping: `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" lesson --role <role> --text "..."`.
+- Edit a skill file (crew's skills are shipped and overwritten on update). A lesson worth keeping: `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py lesson --role <role> --text "..."`.
 
 ## Stop rules
 

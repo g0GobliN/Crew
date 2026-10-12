@@ -38,7 +38,7 @@ def run_graph(pkg, card, out_json):
 
 def card_done_when(card):
     """The card's own 'Done when' line, read straight from the board database."""
-    db = os.environ.get("KANBAN_DB") or os.path.expanduser("~/.hermes/kanban.db")
+    db = os.environ.get("KANBAN_DB") or os.path.join(crew_card.default_home(), "kanban.db")
     try:
         import sqlite3
         conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True)

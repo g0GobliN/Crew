@@ -48,7 +48,19 @@ import subprocess
 import sys
 import time
 
-HOME = os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
+
+
+def _default_home():
+    """Hermes's own answer for its home (this module runs inside Hermes: %LOCALAPPDATA%\\hermes on native Windows,
+    ~/.hermes elsewhere); the POSIX default when Hermes' constants are not importable (a unit test)."""
+    try:
+        from hermes_constants import get_hermes_home
+        return str(get_hermes_home())
+    except Exception:  # noqa: BLE001 - any failure to ask Hermes means "use the documented default"
+        return os.path.expanduser("~/.hermes")
+
+
+HOME = os.environ.get("HERMES_HOME") or _default_home()
 HERE = os.path.dirname(os.path.abspath(__file__))
 USAGE = ("Usage: /crew <what you want>  (intake, asks its questions) | /crew-status"
          " | /crew-graph <card id|latest> [--watch N | --html [PATH]] | /crew-stop [<card id>] [--archive] [--dry-run] | /crew-unstuck <card id>"
@@ -1195,8 +1207,8 @@ def _review_guard(tool_name, args):
     mode = tool.verify_mode(_card_body(card))
     if mode == "proof":
         return {"action": "block",
-                "message": "card %s is `Verify: proof`: no verifier session runs on it. Run `python3 \"$HERMES_HOME/"
-                           "plugins/crew/scripts/crew_card.py\" verdict --card %s`, then kanban_complete with its raw output "
+                "message": "card %s is `Verify: proof`: no verifier session runs on it. Run `sh \"$HERMES_HOME/"
+                           "plugins/crew/scripts/crew-run.sh\" crew_card.py verdict --card %s`, then kanban_complete with its raw output "
                            "(the coordinator audits the proof afterwards)." % (card, card)}
     if mode == "closeout":
         return {"action": "block",
@@ -1240,7 +1252,7 @@ def _skill_edit_guard(tool_name, args):
         return None
     return {"action": "block",
             "message": "crew's skills are shipped by the plugin and overwritten on update (%s); record the lesson with: "
-                       "python3 \"$HERMES_HOME/plugins/crew/scripts/crew_card.py\" lesson --role <role> --text \"...\""
+                       "sh \"$HERMES_HOME/plugins/crew/scripts/crew-run.sh\" crew_card.py lesson --role <role> --text \"...\""
                        % ", ".join(hit)}
 
 
@@ -1331,7 +1343,7 @@ def crew_tool_guard(tool_name=None, args=None, **kwargs):
                 return {"action": "block",
                         "message": "verifier terminal is read/run only; this command writes, moves, deletes, "
                                    "commits or sends. Run the card's proof with "
-                                   "`python3 \"$HERMES_HOME/plugins/crew/scripts/crew_card.py\" verdict --card %s`." % card}
+                                   "`sh \"$HERMES_HOME/plugins/crew/scripts/crew-run.sh\" crew_card.py verdict --card %s`." % card}
     return None
 
 

@@ -43,12 +43,13 @@ On native Windows the installer skips the systemd unit by itself, and `--no-cron
 hooks and the command menus are written exactly as on Linux. `NAME` is the profile you chat with
 (`default` if you do not use profiles). Use `python` or `py -3` wherever the docs say `python3`.
 
-Install [Git for Windows](https://git-scm.com/download/win) first. A proof command is a bash command, so crew
-runs every proof in Git Bash - no WSL needed. It looks for `bin\bash.exe` or `usr\bin\bash.exe` next to the
-`git.exe` on your `PATH`, and never uses `C:\Windows\System32\bash.exe`, which is WSL's and a different
-machine. Without Git for Windows the proof does not run and reports `Git Bash was not found next to git.exe:
-crew proofs run in Git Bash on Windows (install Git for Windows); the proof was not run`. Checking whether a
-worker process is alive, and stopping or parking a card, work natively too (`OpenProcess` and `taskkill /T /F`).
+Crew runs every proof in the Git Bash Hermes itself uses, so no WSL is needed. It looks, in order, for
+`HERMES_GIT_BASH_PATH`, the PortableGit Hermes's own installer puts under `%LOCALAPPDATA%\hermes\git`, then
+`bin\bash.exe` or `usr\bin\bash.exe` next to the `git.exe` on your `PATH` ([Git for Windows](https://git-scm.com/download/win)).
+It never uses `C:\Windows\System32\bash.exe`, which is WSL's and a different machine. Without any of them the proof
+does not run and reports `Git Bash was not found next to git.exe: crew proofs run in Git Bash on Windows (install Git
+for Windows); the proof was not run`. Checking whether a worker process is alive, and stopping or parking a card, work
+natively too (`OpenProcess` and `taskkill /T /F`).
 
 If you use Hermes Desktop, crew's Crew page needs no dashboard server; see
 [Crew in Hermes Desktop](README.md#crew-in-hermes-desktop) for which profile to install into.
@@ -97,6 +98,11 @@ The runtime failures on a host with no POSIX shell around the plugin are fixed i
 | a proof reports `Git Bash was not found next to git.exe` | on Windows a proof runs in Git Bash, and `git.exe` is missing from `PATH` or has no `bash.exe` beside it | install Git for Windows and reopen the terminal; crew never falls back to WSL's `bash.exe` or `cmd.exe` |
 | the install reports a consent-record or hook file-mode finding on Windows | Windows cannot express POSIX file modes (`0600`, the exec bit) | those two checks now run only on POSIX hosts; a Windows profile is protected by its ACLs |
 | the board's machine label is blank | `os.uname()` is POSIX-only | `platform.node()` |
+| `crew_card.py` or a proof's safety guard cannot find Hermes: `hermes_python()` is empty, `tools.approval_detection` does not import | crew looked for `venv/bin/python` and `lib/python*/site-packages`; a Windows venv has `venv\Scripts\python.exe` and `Lib\site-packages`, and Hermes's source sits at `%LOCALAPPDATA%\hermes\hermes-agent`, not `~/.hermes/hermes-agent` (reported in #8 by @tianola) | one venv lookup (`crew_card.venv_python`, `venv_site_packages`) and one default home (`crew_card.default_home`) used everywhere |
+| a script re-run under the Hermes python returns at once with status 0 | Windows has no `exec`: `os.execv` starts the new process and ends the old one | the re-run waits for the child and passes its exit status on (the nightly-proofs shim too) |
+| a proof or a worker instruction says `python3`, which Windows does not have | the commands crew writes named `python3` | on Windows they name the interpreter that runs crew, quoted, with forward slashes |
+| an agent's `python3 "$HERMES_HOME/plugins/crew/scripts/..."` fails: `python3: command not found` (a CI box with `setup-python` hid it) | the skills told agents to run `python3`; a native Windows Hermes provides only its own venv python | the skills give `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py ...`; the launcher picks `$CREW_PYTHON`, Hermes's venv python, then `python3`, `python`, `py -3` (the e2e job runs those exact commands through Hermes's terminal with no python on PATH) |
+| crew defaults to `~/.hermes` when `HERMES_HOME` is unset | the Windows default home is `%LOCALAPPDATA%\hermes` | `crew_card.default_home()` |
 
 ## If you wire it up by hand
 
@@ -111,5 +117,10 @@ The runtime failures on a host with no POSIX shell around the plugin are fixed i
 The Windows-specific logic runs on any OS:
 
 ```bat
-py -3 -m unittest tests.test_crew_windows_support
+py -3 -m unittest tests.test_crew_windows_support tests.test_crew_windows_layout
 ```
+
+The `e2e-windows` job in `.github/workflows/tests.yml` runs the other half on a real native Windows Hermes: it installs
+Hermes with its own `install.ps1`, installs crew into a profile with `install.py --profile e2e --no-cron`, and runs
+`tests/e2e/windows_native.py`, which checks the Windows venv python, the safety guard, a proof in Git Bash and its exit
+code, the re-run under the Hermes python, the board and dashboard, and process liveness and stop.

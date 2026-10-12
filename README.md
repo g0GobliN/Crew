@@ -169,7 +169,7 @@ and tell me what it answered.
 
 What agents learn on a card lives in `<base home>/crew/lessons.md`, one dated line per lesson with the roles it
 applies to. It is never shipped and the installer and `crew_parity_check` leave it alone. Agents record a lesson
-with `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" lesson --role content,verifier --text "..."`
+with `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py lesson --role content,verifier --text "..."`
 (identical lessons are stored once; the newest 50 entries / 8 KB are kept); editing a crew skill with
 `skill_manage` is refused in every profile, because an installed skill is overwritten by the next install.
 The plugin adds a role's lessons (and the `all` ones) to that role's turn, and the `all` ones to `/crew`'s intake.

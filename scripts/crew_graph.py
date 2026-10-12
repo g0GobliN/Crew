@@ -66,7 +66,7 @@ HTML_COLOURS = {
 
 def base_home():
     """Return the base Hermes home directory (the parent that holds profiles/)."""
-    h = os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes")
+    h = crew_card.hermes_home()
     h = os.path.abspath(h)
     # If HERMES_HOME points at a profile home (<base>/profiles/<name>), walk up.
     if os.path.basename(os.path.dirname(h)) == "profiles" and os.path.basename(h) != "profiles":

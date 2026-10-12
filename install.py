@@ -31,6 +31,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SRC_DIR = Path(__file__).resolve().parent          # the libs/crew directory (source of truth)
+if str(SRC_DIR / "scripts") not in sys.path:
+    sys.path.insert(0, str(SRC_DIR / "scripts"))
+import crew_card  # noqa: E402 - the one place that knows where Hermes, its venv and its default home are on this OS
 UNIT_GRAPH_NAME = "crew-graph-http.service"
 GRAPH_PORT = 8799
 UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
@@ -56,10 +59,13 @@ PROOFS_SHIM_TEXT = (
     "# switches to the Hermes python itself.\n"
     "import os\n"
     "import sys\n"
+    "import subprocess\n"
     "\n"
     "runner = os.path.join(os.path.dirname(os.path.abspath(__file__)), \"..\", \"plugins\", \"crew\", \"scripts\",\n"
     "                      \"crew_proofs.py\")\n"
-    "os.execv(sys.executable, [sys.executable, runner, \"--quiet\"] + sys.argv[1:])\n")
+    "\n"
+    "# not os.execv: on Windows that ends this process at once with status 0, before the proofs have run\n"
+    "sys.exit(subprocess.call([sys.executable, runner, \"--quiet\"] + sys.argv[1:]))\n")
 
 # Everything in the package's scripts/ ships: one list derived from the tree, so a new script can never be left
 # out of the installed copy (crew_safety.py once was, and every importer crashed). Bytecode never ships.
@@ -89,7 +95,7 @@ ROLE_FILES = ["roles.json", "briefs/coordinator.md", "briefs/worker.md", "briefs
 
 
 def hermes_bin():
-    return os.environ.get("HERMES_BIN") or shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    return crew_card.hermes_bin()
 
 
 def python3_bin():
@@ -102,8 +108,8 @@ def python3_bin():
 def resolve_profile_home(name):
     name = (name or "").strip()
     if not name or name == "default":
-        return os.environ.get("HERMES_HOME") or str(Path.home() / ".hermes")
-    return str(Path.home() / ".hermes" / "profiles" / name)
+        return os.environ.get("HERMES_HOME") or crew_card.default_home()
+    return os.path.join(crew_card.default_home(), "profiles", name)
 
 
 def profile_flag(name):
@@ -148,12 +154,8 @@ print(json.dumps(out))
 def _hermes_python():
     """(python, root) of the Hermes install that can import hermes_cli: the package manager's committed venv,
     else a legacy in-tree venv (crew_card.hermes_python decides); (None, None) when neither exists."""
-    scripts = os.path.join(SRC_DIR, "scripts")
-    if scripts not in sys.path:
-        sys.path.insert(0, scripts)
-    import crew_card
     root = os.path.dirname(os.path.dirname(os.path.realpath(hermes_bin())))
-    for cand in (os.path.join(Path.home(), ".hermes", "hermes-agent"), root):
+    for cand in (crew_card.hermes_root(), root):
         py = crew_card.hermes_python(cand)
         if py:
             return py, cand
@@ -313,7 +315,7 @@ def step_crew_dirs(profile_home, apply):
     return "CHANGED", "created " + ", ".join(need)
 
 
-OWNER_RECORD = os.path.join(str(Path.home() / ".hermes"), "crew", "owner.json")
+OWNER_RECORD = os.path.join(crew_card.default_home(), "crew", "owner.json")
 
 
 def _owner_record():
@@ -356,7 +358,7 @@ def step_other_copies(profile_home, prefix, apply):
     released version in every profile"): plugin (scripts included), skills, roles file and the removal of old script
     copies, nothing else - its config, services and ownership are left alone. Only a profile that already has
     plugins/crew is touched; every change is printed. Role profiles are kept current by the profiles step."""
-    base = str(Path.home() / ".hermes")
+    base = crew_card.default_home()
     roles = {home for _r, _n, home, _t in _role_plans(prefix)}
     homes = [base] + sorted(str(p) for p in (Path(base) / "profiles").glob("*") if p.is_dir())
     stale = []

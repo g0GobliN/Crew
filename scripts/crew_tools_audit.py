@@ -16,10 +16,12 @@ import argparse
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import crew_card  # noqa: E402 - where Hermes lives on this OS
 
 DEFAULT_FORBID = [
     "write_file", "patch", "skill_manage", "memory", "cronjob_manage", "delegate_task",
@@ -35,21 +37,23 @@ def hermes_src():
     env = os.environ.get("HERMES_AGENT_SRC")
     if env and os.path.isdir(env):
         return env
-    exe = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    exe = crew_card.hermes_bin()
     try:
         out = subprocess.run([exe, "--print-runtime-command"], capture_output=True, text=True,
                              timeout=60, encoding="utf-8", errors="replace").stdout
         m = re.search(r"sys\.path\.insert\(0, '([^']+)'\)", out)
-        if m and os.path.isdir(m.group(1)):
-            return m.group(1)
+        # the runtime command prints the path as a Python literal: a Windows path comes with doubled backslashes
+        src = m.group(1).replace("\\\\", "\\") if m else ""
+        if src and os.path.isdir(src):
+            return src
     except Exception:
         pass
-    guess = os.path.expanduser("~/.hermes/hermes-agent")
+    guess = crew_card.hermes_root()
     return guess if os.path.isdir(guess) else None
 
 
 def profile_home(name):
-    base = Path.home() / ".hermes"
+    base = Path(crew_card.default_home())
     return str(base if name in ("", "default") else base / "profiles" / name)
 
 

@@ -18,7 +18,7 @@ Loaded on a crew card whose role is worker. You are the only writer on this card
 3. A card whose proof command runs a `.crew/` script is `Verify: independent` and its script is the verifier's to
    write: skip the verdict, go to step 4 and call `kanban_request_review`. Otherwise run the proof through the tool, never by hand, so the PASS/FAIL line lands in the verdict log:
 
-       python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" verdict --card <card id>
+       sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py verdict --card <card id>
 
    The tool runs the proof command the card was opened with. Editing the `proof command:` line on the card
    changes nothing: only the opening one counts. Exit 5 means Hermes safety refused the proof and nothing ran
@@ -38,4 +38,4 @@ Loaded on a crew card whose role is worker. You are the only writer on this card
 - Claim done without a PASS line for the proof command.
 - Edit anything the card does not name, or the card's own proof command.
 - Send anything outward (mail, posts, chat to outsiders).
-- Edit a skill file (crew's skills are shipped and overwritten on update). A lesson worth keeping: `python3 "$HERMES_HOME/plugins/crew/scripts/crew_card.py" lesson --role <role> --text "..."` (role = who it applies to: worker, content, verifier, coordinator or all).
+- Edit a skill file (crew's skills are shipped and overwritten on update). A lesson worth keeping: `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py lesson --role <role> --text "..."` (role = who it applies to: worker, content, verifier, coordinator or all).
