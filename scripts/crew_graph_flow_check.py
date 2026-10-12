@@ -32,7 +32,7 @@ def check(name, ok, detail=""):
 def run_graph(pkg, card, out_json):
     script = os.path.join(pkg, "scripts", "crew_graph.py")
     r = subprocess.run([sys.executable, script, "--card", card, "--json", out_json],
-                       capture_output=True, text=True, timeout=180)
+                       capture_output=True, text=True, timeout=180, encoding="utf-8", errors="replace")
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -64,7 +64,7 @@ def main():
     code, out = run_graph(a.package, a.card, gj)
     if not check("graph builds for %s" % a.card, code == 0 and os.path.exists(gj), out[:200]):
         return 1
-    g = json.load(open(gj))
+    g = json.load(open(gj, encoding="utf-8"))
 
     nodes = g.get("nodes", [])
     edges = g.get("edges", [])
@@ -170,12 +170,12 @@ def main():
     html_path = os.path.join(tmp, "page.html")
     r = subprocess.run([sys.executable, os.path.join(a.package, "scripts", "crew_graph.py"),
                         "--card", a.card, "--html", "--outdir", tmp],
-                       capture_output=True, text=True, timeout=180)
+                       capture_output=True, text=True, timeout=180, encoding="utf-8", errors="replace")
     cand = [os.path.join(tmp, f) for f in os.listdir(tmp) if f.endswith(".html")]
     check("page written", bool(cand) and os.path.getsize(cand[0]) > 2000,
           cand[0] if cand else (r.stdout + r.stderr)[:120])
     if cand:
-        html = open(cand[0]).read()
+        html = open(cand[0], encoding="utf-8").read()
         check("no external URLs in the page",
               not re.search(r"https?://(?!127\.0\.0\.1|localhost)", html),
               "%d match(es)" % len(re.findall(r"https?://(?!127\.0\.0\.1|localhost)", html)))

@@ -169,7 +169,7 @@ class StateFileTests(unittest.TestCase):
         cc.drop_lock(self.board)
         self.assertFalse(cc.lock_live(self.board))
         path = cc.state_path("coordinator.lock", self.board)
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write("999999999")                     # no such pid
         self.assertFalse(cc.lock_live(self.board))
         self.assertTrue(cc.take_lock(self.board))
@@ -199,7 +199,7 @@ class HandleCardTests(unittest.TestCase):
         self.applied = []
 
         def decider(ctx, facts_path):
-            self.asked.append(Path(facts_path).read_text())
+            self.asked.append(Path(facts_path).read_text(encoding="utf-8"))
             return self.answer, 0
 
         self.answer = 'ok\n{"decision": "retry", "fix": "use tmp"}'
@@ -314,7 +314,7 @@ class HandleCardTests(unittest.TestCase):
         add_card()
         add_event("t_1", "blocked")
         answers = iter(['{"decision": "retry"}', '{"decision": "retry", "fix": "use tmp"}'])
-        self.ctx.decider = lambda ctx, path: (self.asked.append(Path(path).read_text()) or next(answers), 0)
+        self.ctx.decider = lambda ctx, path: (self.asked.append(Path(path).read_text(encoding="utf-8")) or next(answers), 0)
         got = self.handle()
         self.assertEqual("retry", got["action"])
         self.assertIn("a retry needs a non-empty `fix`", self.asked[1])
@@ -701,7 +701,7 @@ class HasWorkTests(unittest.TestCase):
         self.assertFalse(cc.has_work())
         path = cc.crew_notify.state_file()
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             json.dump({"since": 1, "sent": {}, "tries": {"t_1|done:3": 1}}, fh)
         self.addCleanup(os.unlink, path)
         self.assertTrue(cc.has_work())

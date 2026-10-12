@@ -51,7 +51,7 @@ def check(name, ok, detail=""):
 
 
 def run(argv):
-    proc = subprocess.run(argv, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
     return (proc.stdout or "") + (proc.stderr or "")
 
 

@@ -122,7 +122,7 @@ def kanban_cli(*args):
     """The kernel's own command, so its events, promotion and notification all still happen."""
     import crew_card
     return subprocess.run([crew_card.hermes_bin(), "kanban"] + [str(a) for a in args],
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
 
 
 def release_block(card):

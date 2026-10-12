@@ -114,7 +114,7 @@ def _apply_overrides(env, pairs):
 def _probe(args, env, timeout=_PROBE_TIMEOUT):
     try:
         return subprocess.run(["git"] + list(args), env=env, stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, timeout=timeout)
+                              capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
     except Exception:  # noqa: BLE001 - a probe that cannot run is a refusal, not a crash
         return None
 

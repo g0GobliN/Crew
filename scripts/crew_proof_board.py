@@ -42,7 +42,7 @@ def init_board(db_path, real_home=None):
     env = dict(os.environ, PYTHONPATH=AGENT, HERMES_KANBAN_DB=db_path,
                HERMES_HOME=real_home or os.environ.get("HERMES_HOME") or os.path.expanduser("~/.hermes"))
     subprocess.run([VENV_PY, "-c", "from hermes_cli import kanban_db as kb; kb.init_db()"], env=env,
-                   capture_output=True, text=True, timeout=180, cwd=AGENT)
+                   capture_output=True, text=True, timeout=180, cwd=AGENT, encoding="utf-8", errors="replace")
     return os.path.exists(db_path)
 
 
@@ -54,7 +54,7 @@ def claim_review(db_path, card_id, real_home=None):
     code = ("from hermes_cli import kanban_db as kb, kanban_db_connect as kbc\n"
             "conn = kbc.connect()\n"
             "print(kb.claim_review_task(conn, %r, claimer='proof-reviewer') is not None)\n" % card_id)
-    done = subprocess.run([VENV_PY, "-c", code], env=env, capture_output=True, text=True, timeout=180, cwd=AGENT)
+    done = subprocess.run([VENV_PY, "-c", code], env=env, capture_output=True, text=True, timeout=180, cwd=AGENT, encoding="utf-8", errors="replace")
     return (done.stdout or "").strip().endswith("True")
 
 
@@ -108,7 +108,7 @@ def ensure_proofs_board(hermes=None):
         exe = hermes or os.environ.get("HERMES_BIN") or shutil.which("hermes") or "hermes"
         subprocess.run([exe, "kanban", "boards", "create", PROOFS_BOARD, "--name", "Crew proofs",
                         "--description", "Seed cards of the crew proof suite. Nothing here is real work."],
-                       capture_output=True, text=True, timeout=240, stdin=subprocess.DEVNULL)
+                       capture_output=True, text=True, timeout=240, stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
     return os.path.exists(proofs_db())
 
 

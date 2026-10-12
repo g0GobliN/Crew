@@ -204,7 +204,7 @@ def _cmd_maintenance(action, rest):
     try:
         r = subprocess.run([sys.executable, path] + [a for a in (rest or "").split() if a],
                            capture_output=True, text=True, errors="replace",
-                           timeout=timeout, env=_utf8_env())
+                           timeout=timeout, env=_utf8_env(), encoding="utf-8")
     except subprocess.TimeoutExpired:
         return "%s timed out after %ds" % (action, timeout)
     except Exception as exc:  # noqa: BLE001 - a pass must never break the chat turn
@@ -239,14 +239,14 @@ def _cmd_safety(rest=""):
     names = [r.get("name") for r in tool.roles_defaults().get("roles", []) if r.get("name")] or list(CREW_ROLES)
     state_path = os.path.join(tool.base_home(), "crew", "safety-approvals.json")
     try:
-        with open(state_path) as fh:
+        with open(state_path, encoding="utf-8") as fh:
             kept = json.load(fh)
     except (OSError, ValueError):
         kept = {}
 
     def hermes(profile, *args):
         return subprocess.run([_hermes_bin(), "-p", profile, "config"] + list(args), capture_output=True, text=True,
-                              timeout=60)
+                              timeout=60, encoding="utf-8", errors="replace")
 
     shown, failed = [], []
     for name in names:
@@ -272,7 +272,7 @@ def _cmd_safety(rest=""):
             failed.append(profile)
     try:
         os.makedirs(os.path.dirname(state_path), exist_ok=True)
-        with open(state_path, "w") as fh:
+        with open(state_path, "w", encoding="utf-8") as fh:
             json.dump(kept, fh, indent=1)
     except OSError:
         failed.append("(could not save %s)" % state_path)
@@ -320,7 +320,7 @@ def _option_handler(action):
 def _config_get(key):
     try:
         r = subprocess.run([_hermes_bin(), "config", "get", key],
-                           capture_output=True, text=True, timeout=30)
+                           capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace")
         out = r.stdout.strip()
         return out if r.returncode == 0 and out else None
     except Exception:
@@ -388,7 +388,7 @@ def _log_quota_failure(card, exc):
     try:
         path = os.path.join(HOME, "crew", "quota-errors.log")
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "a") as fh:
+        with open(path, "a", encoding="utf-8") as fh:
             fh.write("%s card=%s %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), card, exc))
     except Exception:
         pass
@@ -401,7 +401,7 @@ def _handoff_text(card):
         return ""
     try:
         r = subprocess.run([sys.executable, path, "--card", str(card), "--record"],
-                           capture_output=True, text=True, timeout=60)
+                           capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
     except Exception:  # noqa: BLE001 - a hand-off must never break the worker's turn
         return ""
     return (r.stdout or "").strip()
@@ -462,7 +462,7 @@ def _run_graph(args, timeout=120):
     cmd = [sys.executable, script] + list(args)
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
-                           timeout=timeout, env=_utf8_env())
+                           timeout=timeout, env=_utf8_env(), encoding="utf-8")
     except subprocess.TimeoutExpired:
         return None, "crew graph timed out"
     except Exception as exc:
@@ -595,7 +595,7 @@ BOARD_WRITE_FILE_RX = re.compile(
 CREW_CONFIG_WRITE_RX = re.compile(
     r"\bhermes\b[^|;]{0,200}?\bconfig\s+(?:set|unset|edit|import|reset)\b"
     r"|\bapprovals\.mode\b", re.I)
-CREW_PROFILE_CONFIG_RX = re.compile(r"(?:^|/)profiles/crew-[^/]+/config\.yaml$")
+CREW_PROFILE_CONFIG_RX = re.compile(r"(?:^|/)profiles/crew-[^/]+/config\.yaml$", re.I)
 
 
 def _crew_config_write_attempt(tool_name, args):
@@ -623,13 +623,16 @@ def _board_write_attempt(tool_name, args):
 
 # Proof scripts live in a `.crew/` folder and belong to the verifier: a writer never creates or changes one, and the
 # verifier's file tools reach nothing else.
-CREW_DIR_RX = re.compile(r"(?:^|[\s'\"=/])\.crew(?:/|$)")
+CREW_DIR_RX = re.compile(r"(?:^|[\s'\"=/\\])\.crew(?:[/\\]|$)")
 PATCH_FILE_RX = re.compile(r"^\*\*\* (?:Update|Add|Delete|Move to)[^:\n]*:\s*(.+)$", re.M)
 FILE_WRITE_TOOLS = ("write_file", "patch")
 
 
 def _file_tool_paths(args):
-    return [p for p in [str(args.get("path") or "")] + PATCH_FILE_RX.findall(str(args.get("patch") or "")) if p.strip()]
+    """The paths a file tool call targets, with Windows backslashes read as slashes so the path guards
+    (CREW_PROFILE_CONFIG_RX, CREW_DIR_RX) see C:\\x\\profiles\\crew-w\\config.yaml exactly like the POSIX form."""
+    found = [str(args.get("path") or "")] + PATCH_FILE_RX.findall(str(args.get("patch") or ""))
+    return [p.replace("\\", "/") for p in found if p.strip()]
 
 
 def _only_crew_dir(args):
@@ -656,7 +659,7 @@ def _crew_role():
     if _ROLE is None:
         _ROLE = ""
         try:
-            with open(os.path.join(HOME, "config.yaml")) as fh:
+            with open(os.path.join(HOME, "config.yaml"), encoding="utf-8") as fh:
                 inside = False
                 for line in fh:
                     if re.match(r"^crew:\s*$", line):
@@ -688,7 +691,7 @@ def _card_budget(card):
 
 def _budget_used(card):
     try:
-        with open(_budget_file(card)) as fh:
+        with open(_budget_file(card), encoding="utf-8") as fh:
             return int(json.load(fh).get("used", 0))
     except Exception:
         return 0
@@ -741,7 +744,7 @@ def crew_budget_account(usage=None, **kwargs):
         path = _budget_file(card)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 prev = json.load(fh)
             if not isinstance(prev, dict):
                 prev = {}
@@ -759,7 +762,7 @@ def crew_budget_account(usage=None, **kwargs):
                      "raw_total": _int("raw_total") + raw, "calls": _int("calls") + 1,
                      "raw_last": raw, "profile": _profile_name(), "updated": time.time()})
         tmp = path + ".tmp"
-        with open(tmp, "w") as fh:
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh)
         os.replace(tmp, path)
     except Exception:
@@ -866,13 +869,13 @@ def _note_overrun(card, used, budget, tool_name):
         path = _budget_file(card)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
         except Exception:
             data = {"card": card, "used": used, "budget": budget}
         data["overrun_warning"] = {"used": used, "budget": budget, "tool": tool_name, "ts": time.time()}
         tmp = path + ".tmp"
-        with open(tmp, "w") as fh:
+        with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(data, fh)
         os.replace(tmp, path)
     except Exception:

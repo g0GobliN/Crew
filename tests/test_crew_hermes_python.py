@@ -15,7 +15,7 @@ import crew_card  # noqa: E402
 def _py(venv):
     p = Path(venv) / "bin" / "python"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text("")
+    p.write_text("", encoding="utf-8")
     return str(p)
 
 
@@ -35,8 +35,8 @@ class HermesPythonOrder(unittest.TestCase):
     def _fake_pm(self, body):
         d = self.root / "pm"
         d.mkdir()
-        (d / "__init__.py").write_text("")
-        (d / "environments.py").write_text(body)
+        (d / "__init__.py").write_text("", encoding="utf-8")
+        (d / "environments.py").write_text(body, encoding="utf-8")
 
     def test_committed_venv_wins_over_legacy(self):
         committed = Path(self._tmp.name) / "store" / "venv"
@@ -59,7 +59,7 @@ class HermesPythonOrder(unittest.TestCase):
         self.assertEqual("", crew_card.hermes_python(str(self.root)))
         for k in [k for k in sys.modules if k == "pm" or k.startswith("pm.")]:
             del sys.modules[k]
-        (self.root / "pm" / "environments.py").write_text("def committed_venv(root):\n    raise RuntimeError('x')\n")
+        (self.root / "pm" / "environments.py").write_text("def committed_venv(root):\n    raise RuntimeError('x')\n", encoding="utf-8")
         want = _py(self.root / "venv")
         self.assertEqual(want, crew_card.hermes_python(str(self.root)))
 

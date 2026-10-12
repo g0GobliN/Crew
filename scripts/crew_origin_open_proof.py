@@ -41,7 +41,7 @@ def main():
          "--role", "worker", "--artifact", "a log line", "--lands", "scratch", "--audience", "the owner",
          "--done-when", "the origin event names the topic", "--proof-cmd", "true", "--units", "one pass",
          "--constraints", "none", "--origin", "zulip:" + CHAT, "--json"],
-        env=env, capture_output=True, text=True, timeout=300)
+        env=env, capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
     m = re.search(r'"id":\s*"(t_[0-9a-f]+)"', opened.stdout or "")
     card = m.group(1) if m else ""
     check("a card opens from that topic", bool(card), ((opened.stdout or "") + (opened.stderr or ""))[-80:].strip())
@@ -57,7 +57,7 @@ def main():
           "chat %r" % chat[:60])
 
     read = subprocess.run([sys.executable, CARD, "origin", "--card", card], env=env, capture_output=True,
-                          text=True, timeout=120)
+                          text=True, timeout=120, encoding="utf-8", errors="replace")
     check("`crew_card.py origin` reads the same record back",
           read.returncode == 0 and TOPIC in (read.stdout or ""), (read.stdout or read.stderr).strip()[:70])
 

@@ -44,7 +44,7 @@ def open_card(title, proof, verify):
     r = subprocess.run([sys.executable, CARD, "open", "--title", title, "--goal", title, "--role", "worker",
                         "--artifact", "a file", "--lands", "scratch", "--audience", "the owner",
                         "--done-when", "the file exists", "--proof-cmd", proof, "--budget", "200000",
-                        "--verify", verify, "--json"], env=cp.ENV, capture_output=True, text=True, timeout=300)
+                        "--verify", verify, "--json"], env=cp.ENV, capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
     m = re.search(r'"id":\s*"(t_[0-9a-f]+)"', r.stdout or "")
     if not m:
         raise RuntimeError("card not opened: %s" % ((r.stdout or "") + (r.stderr or ""))[-300:])
@@ -53,13 +53,13 @@ def open_card(title, proof, verify):
 
 def verdict(cid, by):
     args = [sys.executable, CARD, "verdict", "--card", cid, "--by", by, "--no-hand-back"]
-    return subprocess.run(args, env=cp.ENV, capture_output=True, text=True, timeout=300)
+    return subprocess.run(args, env=cp.ENV, capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
 
 
 def lines(cid):
     path = crew_card.verdict_path(cid)
     try:
-        return [json.loads(x) for x in open(path)]
+        return [json.loads(x) for x in open(path, encoding="utf-8")]
     except OSError:
         return []
 
@@ -111,7 +111,7 @@ def main():
           g and g["action"] == "block" and proof_a in g["message"], (g or {}).get("message", "allowed")[:110])
 
     # ---- C: the real proof passes, the writer closes, the loop audits
-    open(target, "w").write("x")
+    open(target, "w", encoding="utf-8").write("x")
     v = verdict(a, worker)
     g = plug._close_guard("kanban_complete", {"task_id": a})
     check("C: with the real proof passing the writer's PASS lets kanban_complete through",
@@ -140,7 +140,7 @@ def main():
     proof_d = "test -f %s" % target_d
     d = open_card("two-stage D", proof_d, "proof")
     cp.cli("claim", d)
-    open(target_d, "w").write("x")
+    open(target_d, "w", encoding="utf-8").write("x")
     verdict(d, worker)
     cp.cli("complete", d, "--summary", "written; proof PASS")
     os.remove(target_d)                                                          # the artifact is gone again
@@ -178,7 +178,7 @@ def main():
     check("F: the card carries the writer's pin before the review",
           cp.card(f)["model_override"] == "writer-pick", str(cp.card(f)["model_override"]))
     cp.cli("claim", f)
-    open(target_f, "w").write("x")
+    open(target_f, "w", encoding="utf-8").write("x")
     verdict(f, worker)
     g = plug._close_guard("kanban_complete", {"task_id": f})
     check("F: the writer's own PASS does not close an independent card",

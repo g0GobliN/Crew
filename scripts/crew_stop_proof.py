@@ -130,7 +130,7 @@ def promotion_pass():
     """
     return subprocess.run([hermes_bin(), "kanban", "list", "--status", "ready"],
                           capture_output=True, text=True, timeout=180,
-                          env=dict(os.environ, KANBAN_DB=KANBAN_DB))
+                          env=dict(os.environ, KANBAN_DB=KANBAN_DB), encoding="utf-8", errors="replace")
 
 
 def card_row(card):
@@ -170,7 +170,7 @@ def link(parent, child):
 def run_stop(args, home):
     env = dict(os.environ, KANBAN_DB=KANBAN_DB, CREW_STOP_HERMES_ROOT=home)
     return subprocess.run([sys.executable, STOP] + args, capture_output=True, text=True,
-                          timeout=120, env=env)
+                          timeout=120, env=env, encoding="utf-8", errors="replace")
 
 
 def drop():

@@ -613,7 +613,7 @@ def load_roles():
     data = None
     for path in candidates:
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
             break
         except Exception:
@@ -690,7 +690,7 @@ def load_ledger(card_id):
         for suffix in ("", ".spent"):
             path = os.path.join(home, "crew", "budget", card_id + ".json" + suffix)
             try:
-                with open(path) as fh:
+                with open(path, encoding="utf-8") as fh:
                     data = json.load(fh)
             except Exception:
                 continue
@@ -711,7 +711,7 @@ def load_ledger_totals(card_id):
         for suffix in ("", ".spent"):
             path = os.path.join(home, "crew", "budget", card_id + ".json" + suffix)
             try:
-                with open(path) as fh:
+                with open(path, encoding="utf-8") as fh:
                     data = json.load(fh)
             except Exception:
                 continue
@@ -905,7 +905,7 @@ def load_progress_units(card_id):
     for home in home_roots():
         path = os.path.join(home, "crew", "progress", safe + ".json")
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
         except Exception:
             continue
@@ -2277,7 +2277,7 @@ def main(argv=None):
         path = args.json or _default_path(args.outdir or os.getcwd(), graph["card_id"], ".graph.json")
         path = os.path.abspath(path)
         try:
-            with open(path, "w") as fh:
+            with open(path, "w", encoding="utf-8") as fh:
                 fh.write(render_json(graph))
         except Exception as exc:
             print("could not write JSON: %s" % exc)
@@ -2297,9 +2297,9 @@ def main(argv=None):
         json_path = os.path.splitext(html_path)[0] + ".json"
         json_name = os.path.basename(json_path)
         try:
-            with open(json_path, "w") as fh:
+            with open(json_path, "w", encoding="utf-8") as fh:
                 fh.write(render_json(graph))
-            with open(html_path, "w") as fh:
+            with open(html_path, "w", encoding="utf-8") as fh:
                 fh.write(render_html(graph, json_name))
         except Exception as exc:
             print("could not write HTML: %s" % exc)
@@ -2339,6 +2339,8 @@ def watch_loop(card_ref, seconds, colour, steps_n):
 
 
 if __name__ == "__main__":
+    import crew_proc
+    crew_proc.utf8_stdio()
     try:
         sys.exit(main())
     except KeyboardInterrupt:

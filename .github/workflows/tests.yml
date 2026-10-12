@@ -18,12 +18,20 @@ concurrency:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: ${{ matrix.os }}
+    # Windows runs the suite several times slower than Linux
+    timeout-minutes: ${{ matrix.os == 'windows-latest' && 45 || 15 }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ['3.11', '3.12']
+        include:
+          - os: windows-latest
+            python-version: '3.12'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -42,4 +50,4 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e "$RUNNER_TEMP/hermes-agent" pytest
       - name: Run the suite
-        run: python -m pytest tests -q
+        run: python -m pytest tests -q -rf --durations=15

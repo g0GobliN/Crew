@@ -29,7 +29,7 @@ class SafetyCase(unittest.TestCase):
 
     def setUp(self):
         self._env = dict(os.environ)
-        self.home = tempfile.mkdtemp(prefix="crew-safety-test-")
+        self.home = tempfile.mkdtemp(prefix="crew-safety-test-").replace(os.sep, "/")
         self.db = os.path.join(self.home, "kanban.db")
         os.environ.update(HERMES_HOME=self.home, HERMES_KANBAN_DB=self.db)
         os.environ.pop("CREW_PROFILE_PREFIX", None)
@@ -89,7 +89,7 @@ class RunnerTests(SafetyCase):
     def test_a_flagged_rm_is_blocked_in_safe_mode_and_runs_in_brave_mode(self):
         victim = os.path.join(self.home, "victim")
         os.makedirs(victim)
-        cmd = "rm -rf %s" % os.path.join(self.home, "victim")
+        cmd = "rm -rf %s" % victim.replace(os.sep, "/")
         ok, why = crew_safety.check_proof(cmd, "safe")
         self.assertFalse(ok)
         self.assertIn("flagged by Hermes as dangerous", why)
@@ -142,7 +142,7 @@ class ModeTests(SafetyCase):
     def profile(self, mode):
         d = os.path.join(self.home, "profiles", "crew-coordinator")
         os.makedirs(d, exist_ok=True)
-        with open(os.path.join(d, "config.yaml"), "w") as fh:
+        with open(os.path.join(d, "config.yaml"), "w", encoding="utf-8") as fh:
             fh.write("approvals:\n  mode: %s\n  timeout: 300\ncrew:\n  role: coordinator\n" % mode)
 
     def test_safe_unless_the_card_snapshot_or_the_coordinator_profile_says_brave(self):
@@ -344,7 +344,7 @@ class ScriptHashTests(SafetyCase):
 
     def setUp(self):
         super().setUp()
-        self.script = os.path.join(self.home, "site", ".crew", "verify.py")
+        self.script = os.path.join(self.home, "site", ".crew", "verify.py").replace(os.sep, "/")   # bash reads \\ as an escape
         os.makedirs(os.path.dirname(self.script))
         self.write("import sys; sys.exit(0)\n")
         self.cmd = "python3 %s" % self.script
@@ -352,7 +352,7 @@ class ScriptHashTests(SafetyCase):
         self.snap("t_s", self.cmd)
 
     def write(self, text):
-        with open(self.script, "w") as fh:
+        with open(self.script, "w", encoding="utf-8") as fh:
             fh.write(text)
 
     def run_it(self):

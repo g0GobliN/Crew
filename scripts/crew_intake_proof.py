@@ -133,7 +133,7 @@ def main():
     before_cards = cards(args.board)
     t0 = time.time()
     proc = subprocess.run([HERMES, "-p", args.profile, "chat", "-q", VAGUE],
-                          capture_output=True, text=True, timeout=600)
+                          capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
     after_session = newest_session(db)
     after_cards = cards(args.board)
     session = after_session if after_session != before_session else None

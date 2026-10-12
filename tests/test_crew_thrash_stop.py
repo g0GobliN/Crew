@@ -42,7 +42,7 @@ class ThrashCase(unittest.TestCase):
         os.environ["HERMES_HOME"] = self.home
         os.environ["HERMES_KANBAN_DB"] = os.path.join(self.home, "kanban.db")
         os.environ["HERMES_KANBAN_TASK"] = CARD
-        with open(os.path.join(self.home, "config.yaml"), "w") as fh:
+        with open(os.path.join(self.home, "config.yaml"), "w", encoding="utf-8") as fh:
             fh.write("crew:\n  role: worker\n")
         conn = sqlite3.connect(os.environ["HERMES_KANBAN_DB"])
         conn.executescript(

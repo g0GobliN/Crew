@@ -74,9 +74,9 @@ hermes -p NAME plugins doctor crew
 changes nothing; `--check` is a dry run that prints exactly what would change. The installer never asks
 anything and never approves a shell hook for you.
 
-> **On Windows?** The two steps above that assume systemd and cron (the graph-http service and
-> `--nightly-proofs`) have no native equivalent. See **[WINDOWS.md](WINDOWS.md)** - run it under WSL
-> unchanged, or install natively with `--no-service --no-cron` and start the dashboard yourself.
+> **On Windows?** Native Windows is supported with [Git for Windows](https://git-scm.com/download/win)
+> installed (proofs run in Git Bash). It has no systemd or cron, so the graph-http service and
+> `--nightly-proofs` are skipped there. Use WSL if you want both unchanged. See **[WINDOWS.md](WINDOWS.md)**.
 
 ### What `install.py` changes
 

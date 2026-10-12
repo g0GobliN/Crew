@@ -24,6 +24,7 @@ class ArchivedLane(unittest.TestCase):
         self.saved = {k: os.environ.get(k) for k in ("KANBAN_DB", "HERMES_KANBAN_DB")}
         self.addCleanup(self.restore)
         kb, self.conn, path = kbd.open_board(self.tmp.name)
+        self.addCleanup(self.conn.close)         # runs before tmp.cleanup: Windows cannot delete an open database
         os.environ["KANBAN_DB"] = path
         self.mod = serve()
         self.live = kbd.add_card(self.conn, title="live card")

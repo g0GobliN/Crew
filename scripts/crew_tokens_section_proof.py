@@ -66,7 +66,7 @@ def ledger_totals(card_id):
         for suffix in ("", ".spent"):
             path = os.path.join(home, "crew", "budget", card_id + ".json" + suffix)
             try:
-                with open(path) as fh:
+                with open(path, encoding="utf-8") as fh:
                     data = json.load(fh)
             except Exception:
                 continue

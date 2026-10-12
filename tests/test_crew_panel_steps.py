@@ -37,6 +37,7 @@ class SessionRunReaderTests(unittest.TestCase):
         self.db.commit()
 
     def tearDown(self):
+        self.db.close()                  # Windows cannot delete a directory holding an open database
         self.tmp.cleanup()
 
     def _setup(self, task_id, run_status, session_id, ended_at):
@@ -194,7 +195,7 @@ class ReconcileInPlaceTests(unittest.TestCase):
         """updatePanel (ui-spec section 5 panel) builds the skeleton once and then patches its sections:
         setHTML replaces a section only when its markup changed, and the Transcript/Calls lists go through
         the keyed reconcile - the panel itself is never wiped on a poll."""
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js")).read()
+        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
         panel_func = src[src.find("function updatePanel()"):src.find("function flashCopy(")]
         self.assertNotIn('p.innerHTML = ""', panel_func)
         self.assertIn("panelSkeleton(p)", panel_func)
@@ -204,14 +205,14 @@ class ReconcileInPlaceTests(unittest.TestCase):
 
     def test_scroll_preserved(self):
         """updatePanel saves and restores the scrolling body's scrollTop."""
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js")).read()
+        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
         panel_func = src[src.find("function updatePanel()"):src.find("function flashCopy(")]
         self.assertIn("scrollTop = body.scrollTop", panel_func)
         self.assertIn("body.scrollTop = scrollTop", panel_func)
 
     def test_selection_preserved(self):
         """updatePanel saves and restores the selection range."""
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js")).read()
+        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
         panel_func = src[src.find("function updatePanel()"):src.find("function flashCopy(")]
         self.assertIn("getSelection", panel_func)
         self.assertIn("selRange", panel_func)

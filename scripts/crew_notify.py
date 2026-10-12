@@ -297,7 +297,7 @@ def hermes_send(target, text):
         cmd += ["-p", owner]
     cmd += ["send", "-t", target, "--file", "-"]
     try:
-        proc = subprocess.run(cmd, input=text, capture_output=True, text=True, timeout=SEND_TIMEOUT_S)
+        proc = subprocess.run(cmd, input=text, capture_output=True, text=True, timeout=SEND_TIMEOUT_S, encoding="utf-8", errors="replace")
     except (OSError, subprocess.SubprocessError) as exc:
         return False, "%s: %s" % (type(exc).__name__, str(exc)[:160])
     tail = ((proc.stderr or "") + (proc.stdout or "")).strip().splitlines()[-1:] or [""]
@@ -389,4 +389,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import crew_proc
+    crew_proc.utf8_stdio()
     sys.exit(main())

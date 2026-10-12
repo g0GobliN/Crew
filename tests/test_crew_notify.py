@@ -243,12 +243,12 @@ class NotifyTests(unittest.TestCase):
 
     def test_a_dry_run_prints_target_and_text_and_records_nothing(self):
         self.done()
-        before = open(self.state).read()
+        before = open(self.state, encoding="utf-8").read()
         out = []
         N.run(self.db, self.state, dry_run=True, say=out.append,
               send=lambda *_: self.fail("dry run must not send"))
         self.assertIn("--- %s" % ORIGIN, out[0])
-        self.assertEqual(before, open(self.state).read())
+        self.assertEqual(before, open(self.state, encoding="utf-8").read())
 
     # ---- the sender
     def test_hermes_send_calls_the_public_sender_for_the_owner_profile_with_the_text_on_stdin(self):

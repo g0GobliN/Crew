@@ -45,7 +45,9 @@ MAX_WINDOW_FAILURES = 8        # used when roles.json carries no max_window_fail
 FAILURE_WINDOW_CALLS = 25      # used when roles.json carries no failure_window_calls
 DEFAULT_RUNTIME = "60m"
 OUTPUT_KEEP = 4000
-SELF = os.path.abspath(__file__)
+# Proof commands that name this script run in bash on every OS (Git Bash on Windows), where a backslash is an escape:
+# the path is written with forward slashes, which Windows accepts everywhere.
+SELF = os.path.abspath(__file__).replace(os.sep, "/") if os.name == "nt" else os.path.abspath(__file__)
 
 
 def hermes_home():
@@ -74,7 +76,7 @@ def owner_profile():
     if env:
         return env
     try:
-        with open(os.path.join(base_home(), "crew", "owner.json")) as fh:
+        with open(os.path.join(base_home(), "crew", "owner.json"), encoding="utf-8") as fh:
             name = str(json.load(fh).get("profile") or "").strip()
         if name:
             return name
@@ -101,7 +103,7 @@ def package_dir():
     here = os.path.dirname(HERE_SCRIPTS)
     cands = [os.environ.get("CREW_PKG") or "", here]
     try:
-        with open(os.path.join(base_home(), "crew", "owner.json")) as fh:
+        with open(os.path.join(base_home(), "crew", "owner.json"), encoding="utf-8") as fh:
             cands.append(str(json.load(fh).get("package") or ""))
     except (OSError, ValueError, AttributeError):
         pass
@@ -118,7 +120,7 @@ def dashboard_url():
     if env:
         return env.rstrip("/")
     try:
-        with open(os.path.join(base_home(), "crew", "owner.json")) as fh:
+        with open(os.path.join(base_home(), "crew", "owner.json"), encoding="utf-8") as fh:
             url = str(json.load(fh).get("dashboard_url") or "").strip()
         if url:
             return url.rstrip("/")
@@ -136,7 +138,7 @@ def config_value(key, section="crew", home=None):
     without a YAML dependency."""
     path = os.path.join(home or hermes_home(), "config.yaml")
     try:
-        with open(path) as fh:
+        with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
     except OSError:
         return None
@@ -174,7 +176,7 @@ def roles_defaults():
     for path in (os.path.join(hermes_home(), "roles", "crew", "roles.json"),
                  os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "roles", "roles.json")):
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
             if isinstance(data, dict):
                 return data
@@ -708,7 +710,7 @@ def render_body(c):
 
 
 def _kanban(args, timeout=120):
-    return subprocess.run([hermes_bin(), "kanban"] + args, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run([hermes_bin(), "kanban"] + args, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
 
 
 def _created_id(result):
@@ -736,7 +738,7 @@ def create_card(title, body, assignee, skills=(), parents=(), max_runtime=DEFAUL
     if dry_run:
         return {"dry_run": True, "argv": ["hermes", "kanban"] + cmd, "body": body}
     fd, path = tempfile.mkstemp(prefix="crew-card-", suffix=".md")
-    with os.fdopen(fd, "w") as fh:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(body)
     try:
         r = _kanban(cmd + ["--body-file", path])
@@ -779,7 +781,7 @@ def _config_list(section, key):
     path = os.path.join(hermes_home(), "config.yaml")
     out, state = [], 0
     try:
-        with open(path) as fh:
+        with open(path, encoding="utf-8") as fh:
             for line in fh.read().splitlines():
                 if state == 0 and re.match(r"^%s:\s*$" % section, line):
                     state = 1
@@ -843,7 +845,7 @@ def route_answer(task_class="code", label="", profile=None):
     if profile:
         cmd += ["--profile", profile]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=180, encoding="utf-8", errors="replace")
     except subprocess.SubprocessError:
         return None
     out = (r.stdout or "").strip().splitlines()
@@ -1443,7 +1445,7 @@ def all_verdicts(card_id):
         p = os.path.join(h, "crew", "verdicts", safe + ".jsonl")
         try:
             real = os.path.realpath(p)
-            with open(p) as fh:
+            with open(p, encoding="utf-8") as fh:
                 for line in fh:
                     try:
                         v = json.loads(line)
@@ -1497,7 +1499,7 @@ def record_verdict(card_id, command, rc, output, duration, by=None, for_event=No
     }
     if for_event is not None:  # the coordinator's audit of one `completed` event: one line per event id
         line["for_event"] = int(for_event)
-    with open(verdict_path(card_id), "a") as fh:
+    with open(verdict_path(card_id), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(line, ensure_ascii=False) + "\n")
     return line
 
@@ -1919,7 +1921,7 @@ def progress_path(card_id):
 
 def load_progress(card_id):
     try:
-        with open(progress_path(card_id)) as fh:
+        with open(progress_path(card_id), encoding="utf-8") as fh:
             return json.load(fh)
     except Exception:
         return {}
@@ -1938,7 +1940,7 @@ def start_progress(card_id, units):
                                        for u in units],
             "created_at": time.time(), "updated_at": time.time()}
     os.makedirs(os.path.dirname(progress_path(card_id)), exist_ok=True)
-    with open(progress_path(card_id), "w") as fh:
+    with open(progress_path(card_id), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=1)
     return progress_path(card_id)
 
@@ -1970,7 +1972,7 @@ def cmd_progress(args):
     hit["by"] = args.by
     data["updated_at"] = time.time()
     os.makedirs(os.path.dirname(progress_path(args.card)), exist_ok=True)
-    with open(progress_path(args.card), "w") as fh:
+    with open(progress_path(args.card), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=1)
     passed = sum(1 for u in data["units"] if u.get("pass") is True)
     print("card %s - unit %r: %s by %s (%d of %d units passed)" % (
@@ -2074,7 +2076,7 @@ def spent_tokens(card_id):
     used = 0
     for path in ledger_files(card_id):
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 used = max(used, int(json.load(fh).get("used") or 0))
         except Exception:
             continue
@@ -2143,7 +2145,7 @@ def lift_block(card_id, profile=None, body=None):
             res = {"rc": 2, "out": str(exc)[:200]}
     elif row[2] in ("blocked", "scheduled"):
         cmd = [hermes_bin()] + (["-p", profile] if profile else []) + ["kanban", "unblock", card_id]
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=180, encoding="utf-8", errors="replace")
         lines = (done.stdout + done.stderr).strip().splitlines()
         res = {"rc": done.returncode, "out": lines[-1] if lines else ""}
     else:
@@ -2360,7 +2362,7 @@ def ledger_spent(card_id):
         for suffix in ("", ".spent"):
             path = os.path.join(root, card_id + ".json" + suffix)
             try:
-                with open(path) as fh:
+                with open(path, encoding="utf-8") as fh:
                     data = json.load(fh)
                 used = max(used, int(data.get("used") or 0))
                 budget = max(budget, int(data.get("budget") or 0))
@@ -2634,7 +2636,7 @@ def main():
                              indent=2))
             return 0 if pick else 1
         if args.cmd == "plan":
-            with open(args.spec) as fh:
+            with open(args.spec, encoding="utf-8") as fh:
                 spec = json.load(fh)
             res = run_plan(spec, dry_run=args.dry_run)
             if args.json:
@@ -2681,4 +2683,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import crew_proc
+    crew_proc.utf8_stdio()
     sys.exit(main())

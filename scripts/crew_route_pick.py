@@ -69,7 +69,7 @@ def profile_default_model(profile=None):
         return None, None
     prov = model = None
     block = False
-    for line in open(cfg):
+    for line in open(cfg, encoding="utf-8"):
         if line.startswith("model:"):
             block = True
             continue

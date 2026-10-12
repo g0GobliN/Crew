@@ -35,6 +35,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+import crew_proc  # noqa: E402
 DEFAULT_BIND = "127.0.0.1"
 DEFAULT_PORT = 8799
 BOARD_LIMIT = 200
@@ -102,11 +105,7 @@ RUN_QUIET_SECONDS = 1800
 
 
 def pid_alive(pid):
-    try:
-        os.kill(int(pid), 0)
-    except Exception:                            # noqa: BLE001 - gone, or not ours to signal
-        return False
-    return True
+    return crew_proc.alive(pid)
 
 
 def run_is_live(run, now):
@@ -511,7 +510,7 @@ def peer_tags(ip):
     if hit and hit[0] > time.time():
         return hit[1]
     try:
-        r = subprocess.run(["tailscale", "whois", "--json", ip], capture_output=True, text=True, timeout=3)
+        r = subprocess.run(["tailscale", "whois", "--json", ip], capture_output=True, text=True, timeout=3, encoding="utf-8", errors="replace")
         tags = set((json.loads(r.stdout).get("Node") or {}).get("Tags") or []) if r.returncode == 0 else set()
     except (OSError, ValueError, subprocess.SubprocessError):
         tags = set()
@@ -557,7 +556,7 @@ def role_face(role):
     path = os.path.join(CG.crew_card.base_home(), "crew", "faces.json")
     with _FACE_LOCK:
         try:
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 faces = json.load(fh)
             faces = faces if isinstance(faces, dict) else {}
         except (OSError, ValueError):
@@ -569,7 +568,7 @@ def role_face(role):
         try:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             tmp = path + ".tmp"
-            with open(tmp, "w") as fh:
+            with open(tmp, "w", encoding="utf-8") as fh:
                 json.dump(faces, fh, indent=1, sort_keys=True)
             os.replace(tmp, path)
         except OSError:
@@ -707,4 +706,5 @@ def main():
 
 
 if __name__ == "__main__":
+    crew_proc.utf8_stdio()
     main()

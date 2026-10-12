@@ -43,7 +43,7 @@ class Fake:
 
 def put(path, text="x"):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    Path(path).write_text(text)
+    Path(path).write_text(text, encoding="utf-8")
 
 
 def tree_bytes(root):
@@ -101,7 +101,7 @@ class SlimSkillsTests(unittest.TestCase):
         put(os.path.join(both, "settings.conf"), "skills_extra = [devops/foo, devops/baz]\n")
         CI.step_role_skills(self.home, both, self.source, True)
         self.assertEqual(["baz", "foo"], sorted(os.listdir(os.path.join(root, "devops"))))
-        self.assertEqual("baz from source", Path(root, "devops", "baz", "SKILL.md").read_text())
+        self.assertEqual("baz from source", Path(root, "devops", "baz", "SKILL.md").read_text(encoding="utf-8"))
 
     def test_a_second_run_changes_nothing_and_check_mode_writes_nothing(self):
         root = cloned_skills(self.home)
@@ -179,7 +179,7 @@ class SettingsTests(unittest.TestCase):
     def test_every_template_toolset_is_a_kernel_toolset(self):
         if not KERNEL_TOOLSETS.exists():
             self.skipTest("kernel not on this host")
-        known = set(re.findall(r'^    "([a-z_]+)": _ts\(', KERNEL_TOOLSETS.read_text(), re.M))
+        known = set(re.findall(r'^    "([a-z_]+)": _ts\(', KERNEL_TOOLSETS.read_text(encoding="utf-8"), re.M))
         self.assertIn("file", known)
         seen = 0
         for role in CI.ROLE_ORDER:
@@ -337,12 +337,12 @@ class ProvisionFlowTests(unittest.TestCase):
         CI.step_profiles("chat", "crew-", True)
         cmd = [sys.executable, str(REPO / "scripts" / "crew_parity_check.py"), "--package", str(REPO),
                "--profiles", os.path.join(self.tmp, "profiles")]
-        ok = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        ok = subprocess.run(cmd, capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
         self.assertEqual(0, ok.returncode, ok.stdout[-600:])
         self.assertIn("PARITY OK", ok.stdout)
         stale = os.path.join(CI.resolve_profile_home("crew-worker"), "skills", "crew", "crew-verifier", "SKILL.md")
-        Path(stale).write_text("drifted")
-        bad = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        Path(stale).write_text("drifted", encoding="utf-8")
+        bad = subprocess.run(cmd, capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
         self.assertEqual(1, bad.returncode)
         self.assertIn("skills/crew-verifier/SKILL.md", bad.stdout)
 

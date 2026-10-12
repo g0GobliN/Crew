@@ -36,7 +36,7 @@ class BoardResolutionTests(unittest.TestCase):
 
     def bind(self, env):
         done = subprocess.run([sys.executable, "-c", "import crew_stop; print(crew_stop.KANBAN_DB)"],
-                              cwd=str(REPO / "scripts"), capture_output=True, text=True, env=env)
+                              cwd=str(REPO / "scripts"), capture_output=True, text=True, env=env, encoding="utf-8", errors="replace")
         return done.stdout.strip()
 
     def base_env(self, home):
@@ -47,7 +47,7 @@ class BoardResolutionTests(unittest.TestCase):
     def test_a_pinned_board_wins(self):
         with tempfile.TemporaryDirectory() as tmp:
             pinned = os.path.join(tmp, "pinned.db")
-            open(pinned, "w").close()
+            open(pinned, "w", encoding="utf-8").close()
             env = self.base_env(os.path.join(tmp, "home"))
             env["HERMES_KANBAN_DB"] = pinned
             self.assertEqual(pinned, self.bind(env))
@@ -56,7 +56,7 @@ class BoardResolutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = os.path.join(tmp, "home")
             os.makedirs(home, exist_ok=True)
-            open(os.path.join(home, "kanban.db"), "w").close()
+            open(os.path.join(home, "kanban.db"), "w", encoding="utf-8").close()
             bound = self.bind(self.base_env(home))
             self.assertEqual(os.path.join(home, "kanban.db"), bound)
             self.assertNotEqual(os.path.join(os.path.expanduser("~"), ".hermes", "kanban.db"), bound)

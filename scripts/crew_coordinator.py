@@ -53,6 +53,7 @@ import crew_card  # noqa: E402
 import crew_handoff  # noqa: E402
 import crew_heal  # noqa: E402
 import crew_notify  # noqa: E402
+import crew_proc  # noqa: E402
 import crew_safety  # noqa: E402
 
 # The events that can make a crew card need something. Everything else on the board (heartbeats, comments,
@@ -99,7 +100,7 @@ def state_path(name, board=None):
 
 def load_cursor(board=None):
     try:
-        with open(state_path("coordinator-cursor.json", board)) as fh:
+        with open(state_path("coordinator-cursor.json", board), encoding="utf-8") as fh:
             return int(json.load(fh)["last_event_id"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
@@ -109,26 +110,20 @@ def save_cursor(last_id, board=None):
     path = state_path("coordinator-cursor.json", board)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as fh:
+    with open(tmp, "w", encoding="utf-8") as fh:
         json.dump({"last_event_id": int(last_id)}, fh)
     os.replace(tmp, path)
 
 
 def _pid_alive(pid):
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    return crew_proc.alive(pid)
 
 
 def lock_live(board=None):
     """True while another pass holds the lock: its pid is alive and the lock is not older than LOCK_STALE_S."""
     path = state_path("coordinator.lock", board)
     try:
-        with open(path) as fh:
+        with open(path, encoding="utf-8") as fh:
             pid = int((fh.read() or "0").strip() or 0)
         age = time.time() - os.path.getmtime(path)
     except (OSError, ValueError):
@@ -150,7 +145,7 @@ def take_lock(board=None):
             except OSError:
                 pass
             continue
-        with os.fdopen(fd, "w") as fh:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(str(os.getpid()))
         return True
     return False
@@ -246,7 +241,7 @@ def fix_count(decisions):
 def worker_log_tail(card_id):
     try:
         done = subprocess.run([crew_card.hermes_bin(), "kanban", "log", card_id, "--tail", str(LOG_TAIL_BYTES)],
-                              capture_output=True, text=True, timeout=60)
+                              capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
     except Exception:  # noqa: BLE001 - a missing log is an empty section, never a failed pass
         return ""
     lines = (done.stdout or "").strip().splitlines() if done.returncode == 0 else []
@@ -364,7 +359,7 @@ def default_decider(ctx, facts_path):
     # (hermes_cli/main.py load_hermes_dotenv under the profile's HERMES_HOME), not from what it inherits.
     env = crew_safety.proof_env({"CREW_COORDINATOR_TURN": "1"})
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=MODEL_TIMEOUT_S, env=env)
+        done = subprocess.run(cmd, capture_output=True, text=True, timeout=MODEL_TIMEOUT_S, env=env, encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:
         return "decider timed out after %ds" % MODEL_TIMEOUT_S, 124
     except OSError as exc:
@@ -410,7 +405,7 @@ def ask_model(ctx, card, decisions, extra=""):
     facts, problem = build_facts(ctx, card, decisions, extra), ""
     for _attempt in range(2):
         fd, path = tempfile.mkstemp(prefix="crew-coordinator-", suffix=".md")
-        with os.fdopen(fd, "w") as fh:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(facts + (("\n\n## Refused\nYour previous answer was refused: %s. Answer again."
                                % problem) if problem else ""))
         try:
@@ -433,7 +428,7 @@ def ask_model(ctx, card, decisions, extra=""):
 
 def sh(*args, timeout=180):
     done = subprocess.run([str(a) for a in args], capture_output=True, text=True, timeout=timeout,
-                          env=crew_safety.proof_env())
+                          env=crew_safety.proof_env(), encoding="utf-8", errors="replace")
     return done.returncode, ((done.stdout or "") + (done.stderr or "")).strip()
 
 
@@ -1097,4 +1092,5 @@ def main():
 
 
 if __name__ == "__main__":
+    crew_proc.utf8_stdio()
     sys.exit(main())

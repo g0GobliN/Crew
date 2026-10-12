@@ -33,7 +33,7 @@ class LessonsCase(unittest.TestCase):
         shutil.rmtree(self.home, ignore_errors=True)
 
     def cfg(self, role):
-        with open(os.path.join(self.home, "config.yaml"), "w") as fh:
+        with open(os.path.join(self.home, "config.yaml"), "w", encoding="utf-8") as fh:
             fh.write("crew:\n  role: %s\n" % role)
 
     def plugin(self):
@@ -55,7 +55,7 @@ class CommandTests(LessonsCase):
             self.assertEqual(crew_card.main(), 0)   # same lesson again
         finally:
             sys.argv = old
-        text = open(os.path.join(self.home, "crew", "lessons.md")).read()
+        text = open(os.path.join(self.home, "crew", "lessons.md"), encoding="utf-8").read()
         self.assertEqual(text.count(REAL), 1)
         self.assertRegex(text, r"- \d{4}-\d{2}-\d{2} \[content,verifier\] A structural proof")
 

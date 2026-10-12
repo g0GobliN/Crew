@@ -49,7 +49,7 @@ class GuardCase(unittest.TestCase):
             return load_plugin(installed), "installed crew-%s" % role
         home = Path(self.tmp) / role
         home.mkdir(exist_ok=True)
-        (home / "config.yaml").write_text("crew:\n  role: %s\n" % role)
+        (home / "config.yaml").write_text("crew:\n  role: %s\n" % role, encoding="utf-8")
         return load_plugin(home), "scratch %s" % role
 
     def call(self, role, tool, args):
@@ -134,7 +134,7 @@ class ReviseScriptTests(unittest.TestCase):
         import crew_coordinator as cc
         self.cc = cc
         self._env = dict(os.environ)
-        self.home = tempfile.mkdtemp(prefix="crew-revise-")
+        self.home = tempfile.mkdtemp(prefix="crew-revise-").replace(os.sep, "/")
         self.db = os.path.join(self.home, "kanban.db")
         os.environ.update(HERMES_HOME=self.home, HERMES_KANBAN_DB=self.db)
         conn = sqlite3.connect(self.db)
@@ -144,7 +144,7 @@ class ReviseScriptTests(unittest.TestCase):
             " kind text, payload text, created_at integer);")
         conn.commit()
         conn.close()
-        self.script = os.path.join(self.home, "site", ".crew", "verify.py")
+        self.script = os.path.join(self.home, "site", ".crew", "verify.py").replace(os.sep, "/")   # bash reads \\ as an escape
         os.makedirs(os.path.dirname(self.script))
         self.write("import sys; sys.exit(0)\n")
         self.cmd = "python3 %s" % self.script
@@ -175,7 +175,7 @@ class ReviseScriptTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.home, ignore_errors=True)
 
     def write(self, text):
-        with open(self.script, "w") as fh:
+        with open(self.script, "w", encoding="utf-8") as fh:
             fh.write(text)
 
     def hashes_events(self):

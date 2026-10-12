@@ -12,6 +12,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -26,17 +27,17 @@ spec.loader.exec_module(CI)
 def approve(home, event, command):
     """What Hermes records when the owner confirms a hook; the installer has no writer for it."""
     path = os.path.join(home, CI.ALLOWLIST_NAME)
-    data = json.load(open(path)) if os.path.exists(path) else {"approvals": []}
+    data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {"approvals": []}
     data["approvals"].append({"event": event, "command": command, "approved_at": CI._iso(time.time()),
                               "script_mtime_at_approval": CI._mtime_iso(command)})
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
     os.chmod(path, 0o600)
 
 
 def write_config(home, body):
     os.makedirs(home, exist_ok=True)
-    with open(os.path.join(home, "config.yaml"), "w") as fh:
+    with open(os.path.join(home, "config.yaml"), "w", encoding="utf-8") as fh:
         fh.write(body)
 
 
@@ -114,7 +115,7 @@ class PermissionProblemTests(unittest.TestCase):
         self.home = os.path.join(self.tmp, "home")
         self.hook = os.path.join(self.home, "hooks", "gate.py")
         os.makedirs(os.path.dirname(self.hook))
-        with open(self.hook, "w") as fh:
+        with open(self.hook, "w", encoding="utf-8") as fh:
             fh.write("#!/usr/bin/env python3\nprint('{}')\n")
         os.chmod(self.hook, 0o755)
         write_config(self.home, "hooks:\n  pre_tool_call:\n"
@@ -148,17 +149,27 @@ class PermissionProblemTests(unittest.TestCase):
     def test_a_home_without_the_exec_bit_is_a_finding(self):
         approve(self.home, "pre_tool_call", self.hook)
         os.chmod(self.hook, 0o644)
-        problems = CI.permission_problems(self.home)
+        # the POSIX branch, pinned on every OS (Windows reports every file as executable, so it is forced there)
+        with mock.patch.object(CI, "POSIX_MODES", True), mock.patch.object(CI.os, "access", return_value=False):
+            problems = CI.permission_problems(self.home)
         self.assertTrue(any("not executable" in p for p in problems), problems)
+
+    def test_without_posix_modes_neither_the_mode_nor_the_exec_bit_is_a_finding(self):
+        approve(self.home, "pre_tool_call", self.hook)
+        os.chmod(os.path.join(self.home, CI.ALLOWLIST_NAME), 0o666)
+        os.chmod(self.hook, 0o644)
+        with mock.patch.object(CI, "POSIX_MODES", False), mock.patch.object(CI.os, "access", return_value=False):
+            self.assertEqual([], CI.permission_problems(self.home))
 
     def test_a_record_that_is_not_0600_is_a_finding(self):
         approve(self.home, "pre_tool_call", self.hook)
         os.chmod(os.path.join(self.home, CI.ALLOWLIST_NAME), 0o644)
-        problems = CI.permission_problems(self.home)
-        self.assertTrue(any("mode 644" in p for p in problems), problems)
+        with mock.patch.object(CI, "POSIX_MODES", True):
+            problems = CI.permission_problems(self.home)
+        self.assertTrue(any("want 600" in p for p in problems), problems)
 
     def test_a_record_the_runtime_cannot_parse_is_a_finding(self):
-        with open(os.path.join(self.home, CI.ALLOWLIST_NAME), "w") as fh:
+        with open(os.path.join(self.home, CI.ALLOWLIST_NAME), "w", encoding="utf-8") as fh:
             fh.write("{not json")
         problems = CI.permission_problems(self.home)
         self.assertTrue(any("no approvals list" in p or "unreadable" in p for p in problems), problems)
@@ -169,14 +180,14 @@ class NoApprovalWriterTests(unittest.TestCase):
 
     def test_the_installer_has_no_approval_writer_and_sets_no_accept_hooks_env(self):
         self.assertFalse(hasattr(CI, "_approve"))
-        self.assertNotIn("HERMES_ACCEPT_HOOKS", (REPO / "install.py").read_text())
+        self.assertNotIn("HERMES_ACCEPT_HOOKS", (REPO / "install.py").read_text(encoding="utf-8"))
 
     def test_the_step_reports_with_the_hermes_command_and_writes_nothing(self):
         tmp = tempfile.mkdtemp(prefix="crew-perm-unit-")
         home = os.path.join(tmp, "home")
         hook = os.path.join(home, "gate.py")
         os.makedirs(home)
-        Path(hook).write_text("#!/bin/sh\n")
+        Path(hook).write_text("#!/bin/sh\n", encoding="utf-8")
         os.chmod(hook, 0o755)
         write_config(home, "hooks:\n  pre_tool_call:\n    - command: %s\n" % hook)
         saved = CI._role_plans
@@ -197,7 +208,7 @@ class SettingsProblemTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="crew-perm-unit-")
         self.tpl = os.path.join(self.tmp, "tpl")
         os.makedirs(self.tpl)
-        with open(os.path.join(self.tpl, "settings.conf"), "w") as fh:
+        with open(os.path.join(self.tpl, "settings.conf"), "w", encoding="utf-8") as fh:
             fh.write("crew.role = worker\n"
                      "fallback_providers = []\n"
                      "# a comment line is ignored\n"
@@ -239,7 +250,7 @@ class PrefixSettingsTests(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="crew-perm-unit-")
         self.tpl = os.path.join(self.tmp, "tpl")
         os.makedirs(self.tpl)
-        with open(os.path.join(self.tpl, "settings.conf"), "w") as fh:
+        with open(os.path.join(self.tpl, "settings.conf"), "w", encoding="utf-8") as fh:
             fh.write("kanban.auto_decompose = false\nkanban.orchestrator_profile = {prefix}coordinator\n")
         self.saved = CI.PROFILE_PREFIX
         self.addCleanup(setattr, CI, "PROFILE_PREFIX", self.saved)
@@ -267,7 +278,7 @@ class PrefixSettingsTests(unittest.TestCase):
 
     def test_every_role_template_carries_the_loop_keys(self):
         for role in ("coordinator", "worker", "content", "verifier"):
-            text = (REPO / "templates" / "profiles" / role / "settings.conf").read_text()
+            text = (REPO / "templates" / "profiles" / role / "settings.conf").read_text(encoding="utf-8")
             with self.subTest(role=role):
                 self.assertIn("kanban.auto_decompose = false", text)
                 self.assertIn("kanban.orchestrator_profile = {prefix}coordinator", text)
@@ -447,11 +458,11 @@ class OptInStepsTests(unittest.TestCase):
         self.assertEqual("local", create[create.index("--deliver") + 1])
         self.assertEqual("crew_proofs_nightly.py", create[create.index("--script") + 1])
         shim = Path(self.home, "scripts", "crew_proofs_nightly.py")
-        self.assertEqual(CI.PROOFS_SHIM_TEXT, shim.read_text())
+        self.assertEqual(CI.PROOFS_SHIM_TEXT, shim.read_text(encoding="utf-8"))
         self.assertTrue(os.access(shim, os.X_OK))
-        self.assertIn("sys.executable", shim.read_text())
-        self.assertIn("plugins", shim.read_text())
-        self.assertIn("crew_proofs.py", shim.read_text())
+        self.assertIn("sys.executable", shim.read_text(encoding="utf-8"))
+        self.assertIn("plugins", shim.read_text(encoding="utf-8"))
+        self.assertIn("crew_proofs.py", shim.read_text(encoding="utf-8"))
 
     def test_proofs_deliver_overrides_the_target_and_no_cron_wins(self):
         CI.step_proofs_cron("p", self.home, True, False, nightly=True, deliver="telegram")
@@ -464,7 +475,7 @@ class OptInStepsTests(unittest.TestCase):
     def test_a_cron_registered_earlier_is_migrated_to_the_python_shim_and_the_old_sh_goes(self):
         self.registered["Crew proofs (nightly)"] = "abc12345"
         old = Path(self.home, "scripts", "crew_proofs.sh")
-        old.write_text("#!/bin/sh\nexec python3 x\n")
+        old.write_text("#!/bin/sh\nexec python3 x\n", encoding="utf-8")
         status, _detail = CI.step_proofs_cron("p", self.home, False, False)
         self.assertEqual("CHANGED", status)
         self.assertTrue(old.exists(), "--check removes nothing")
@@ -473,7 +484,7 @@ class OptInStepsTests(unittest.TestCase):
         status, _detail = CI.step_proofs_cron("p", self.home, True, False)
         self.assertEqual("CHANGED", status)
         self.assertIn(("p", "cron", "edit", "abc12345", "--script", CI.PROOFS_SHIM), self.cfg.calls)
-        self.assertEqual(CI.PROOFS_SHIM_TEXT, Path(self.home, "scripts", CI.PROOFS_SHIM).read_text())
+        self.assertEqual(CI.PROOFS_SHIM_TEXT, Path(self.home, "scripts", CI.PROOFS_SHIM).read_text(encoding="utf-8"))
         self.assertFalse(old.exists())
         self.assertEqual("OK", CI.step_proofs_cron("p", self.home, True, False)[0])
         self.assertEqual("OK", CI.step_scripts(self.home, True)[0])
@@ -482,25 +493,25 @@ class OptInStepsTests(unittest.TestCase):
     def test_a_symlinked_old_sh_is_unlinked_and_its_target_untouched(self):
         self.registered["Crew proofs (nightly)"] = "abc12345"
         target = Path(self.tmp, "elsewhere.sh")
-        target.write_text("keep me")
+        target.write_text("keep me", encoding="utf-8")
         old = Path(self.home, "scripts", "crew_proofs.sh")
         old.symlink_to(target)
         CI.step_proofs_cron("p", self.home, True, False)
         self.assertFalse(os.path.lexists(old))
-        self.assertEqual("keep me", target.read_text())
+        self.assertEqual("keep me", target.read_text(encoding="utf-8"))
 
     def test_a_symlinked_shim_is_replaced_not_written_through(self):
         target = Path(self.tmp, "shared_shim.py")
-        target.write_text("keep me")
+        target.write_text("keep me", encoding="utf-8")
         Path(self.home, "scripts", CI.PROOFS_SHIM).symlink_to(target)
         CI._write_shim(os.path.join(self.home, "scripts"))
-        self.assertEqual("keep me", target.read_text())
+        self.assertEqual("keep me", target.read_text(encoding="utf-8"))
         self.assertFalse(os.path.islink(os.path.join(self.home, "scripts", CI.PROOFS_SHIM)))
 
     def test_without_a_job_the_old_sh_is_removed_and_nothing_is_registered(self):
         # a role profile or a profile that never ran --nightly-proofs: the old copy is dead weight
         old = Path(self.home, "scripts", "crew_proofs.sh")
-        old.write_text("#!/bin/sh\nexec python3 x\n")
+        old.write_text("#!/bin/sh\nexec python3 x\n", encoding="utf-8")
         self.assertEqual("CHANGED", CI.step_proofs_cron("p", self.home, False, False)[0])
         self.assertTrue(old.exists(), "check mode removes nothing")
         self.assertEqual("CHANGED", CI.step_old_shim(self.home, True)[0])
@@ -519,7 +530,7 @@ class StaleScriptsTests(unittest.TestCase):
         scripts = os.path.join(home, "scripts")
         for rel in ("crew_card.py", "crew_dashboard/crew.css", "crew_follow.py", "worker_route.py", "owner_hook.sh"):
             os.makedirs(os.path.dirname(os.path.join(scripts, rel)), exist_ok=True)
-            Path(scripts, rel).write_text("x")
+            Path(scripts, rel).write_text("x", encoding="utf-8")
         status, detail = CI.step_scripts(home, False)
         self.assertEqual("CHANGED", status)
         self.assertTrue(os.path.exists(os.path.join(scripts, "crew_card.py")), "--check removes nothing")
@@ -553,7 +564,7 @@ class ResolverTests(unittest.TestCase):
     def test_a_script_only_in_hermes_home_scripts_is_not_found(self):
         home = tempfile.mkdtemp(prefix="crew-resolve-unit-")
         os.makedirs(os.path.join(home, "scripts"))
-        Path(home, "scripts", "crew_nowhere.py").write_text("x")
+        Path(home, "scripts", "crew_nowhere.py").write_text("x", encoding="utf-8")
         spec = importlib.util.spec_from_file_location("crew_plugin_resolve", str(REPO / "__init__.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -566,7 +577,7 @@ class ResolverTests(unittest.TestCase):
     def test_crew_source_dir_is_the_fallback(self):
         src = tempfile.mkdtemp(prefix="crew-resolve-src-")
         os.makedirs(os.path.join(src, "scripts"))
-        Path(src, "scripts", "crew_only_here.py").write_text("x")
+        Path(src, "scripts", "crew_only_here.py").write_text("x", encoding="utf-8")
         spec = importlib.util.spec_from_file_location("crew_plugin_resolve2", str(REPO / "__init__.py"))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

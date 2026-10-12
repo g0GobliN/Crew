@@ -146,4 +146,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    import crew_proc
+    crew_proc.utf8_stdio()
     sys.exit(main())

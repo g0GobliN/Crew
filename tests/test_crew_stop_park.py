@@ -45,7 +45,14 @@ class ParkTests(unittest.TestCase):
         self.dir = tempfile.mkdtemp(dir=_TMP)
         self.kb, self.conn, self.db = K.open_board(self.dir)
         self.addCleanup(self.conn.close)
-        self.cli = K.kernel_cli(self.db)
+        kernel = K.kernel_cli(self.db)
+        real_run = subprocess.run
+
+        def routed(argv, **kw):
+            # only the kanban verbs are stood in for; the process probes (powershell, taskkill) are the real ones
+            return kernel(argv, **kw) if "kanban" in list(argv) else real_run(argv, **kw)
+        routed.calls = kernel.calls
+        self.cli = routed
         self.procs = []
         self.addCleanup(lambda: [self.reap(p) for p in self.procs])
         for p in (mock.patch.object(crew_card.subprocess, "run", self.cli),
@@ -60,7 +67,10 @@ class ParkTests(unittest.TestCase):
 
     def reap(self, proc):
         try:
-            os.killpg(os.getpgid(proc.pid), 9)
+            if os.name == "nt":
+                proc.kill()                    # no process groups on Windows
+            else:
+                os.killpg(os.getpgid(proc.pid), 9)
         except Exception:  # noqa: BLE001
             pass
         proc.wait()

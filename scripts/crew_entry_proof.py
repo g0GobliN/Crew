@@ -222,7 +222,7 @@ def main():
           bool(body) and not re.search(r"^\s*-\s*crew\s*$", body, re.M))
     try:
         help_text = subprocess.run([sys.executable, CARD_TOOL, "open", "--help"],
-                                   capture_output=True, text=True, timeout=60).stdout
+                                   capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace").stdout
     except Exception as exc:  # noqa: BLE001
         help_text = ""
         print("note: crew_card.py open --help failed (%s)" % str(exc)[:50])

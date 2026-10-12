@@ -102,7 +102,7 @@ def inner():
     row = (q("select status, assignee from tasks where id = ?", cid) or [("", "")])[0] if cid else ("", "")
     roles = next((p for p in (os.path.join(os.environ["HERMES_HOME"], "roles", "crew", "roles.json"),
                               os.path.join(PKG, "roles", "roles.json")) if os.path.isfile(p)))
-    floor = json.load(open(roles)).get("budget_floor_tokens")
+    floor = json.load(open(roles, encoding="utf-8")).get("budget_floor_tokens")
     check("the card is ready and on the role's profile", row == ("ready", want_assignee), row)
     check("anchor: Budget 1000 became the role floor", ("Budget: %s tokens" % floor) in body, (floor, body[:80]))
     check("anchor: the model's made-up Origin is the session's chat", ("Origin: zulip:%s" % CHAT) in body

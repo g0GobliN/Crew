@@ -44,7 +44,7 @@ def check(name, ok, detail=""):
 def seed():
     now = int(time.time())
     os.makedirs(WS, exist_ok=True)
-    with open(os.path.join(WS, "already-built.txt"), "w") as fh:
+    with open(os.path.join(WS, "already-built.txt"), "w", encoding="utf-8") as fh:
         fh.write("work from the earlier run\n")
     conn = sqlite3.connect(KANBAN_DB)
     try:
@@ -99,7 +99,7 @@ def run_hook(session_id, card, turns=1):
     env = dict(os.environ, HERMES_HOME=crew_card.profile_home("crew-worker"),
                HERMES_KANBAN_TASK=card, HERMES_KANBAN_RUN_ID="999", KANBAN_DB=KANBAN_DB)
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120,
-                       env=env, cwd=HERE)
+                       env=env, cwd=HERE, encoding="utf-8", errors="replace")
     try:
         out = json.loads((r.stdout or "").strip().splitlines()[-1])
     except Exception:
@@ -147,7 +147,7 @@ def main():
           "%d row(s) for run 999" % n)
 
     r = subprocess.run([sys.executable, os.path.join(HERE, "crew_handoff.py"), "--card", OLD,
-                        "--record"], capture_output=True, text=True, timeout=60)
+                        "--record"], capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
     conn = sqlite3.connect(KANBAN_DB)
     try:
         n2 = conn.execute("select count(*) from task_events where task_id = ? and kind = 'handoff'",
@@ -155,7 +155,7 @@ def main():
     finally:
         conn.close()
     subprocess.run([sys.executable, os.path.join(HERE, "crew_handoff.py"), "--card", OLD, "--record"],
-                   capture_output=True, text=True, timeout=60)
+                   capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace")
     conn = sqlite3.connect(KANBAN_DB)
     try:
         n3 = conn.execute("select count(*) from task_events where task_id = ? and kind = 'handoff'",

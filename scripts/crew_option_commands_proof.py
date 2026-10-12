@@ -192,7 +192,7 @@ def main():
     env = dict(os.environ, HERMES_HOME=PROFILE)
     try:
         r = subprocess.run([HERMES_PY, "-c", probe], capture_output=True, text=True, timeout=240,
-                           cwd=HERMES_SRC, env=env)
+                           cwd=HERMES_SRC, env=env, encoding="utf-8", errors="replace")
     except Exception as exc:  # noqa: BLE001
         r = None
         check("the live registry was queried", False, "%s: %s" % (type(exc).__name__, exc))

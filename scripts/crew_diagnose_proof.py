@@ -127,7 +127,7 @@ def main():
     env = dict(os.environ, HERMES_HOME=PROFILE)
     try:
         r = subprocess.run([HERMES_PY, "-c", probe], capture_output=True, text=True, timeout=300,
-                           cwd=HERMES_SRC, env=env)
+                           cwd=HERMES_SRC, env=env, encoding="utf-8", errors="replace")
         names = json.loads(r.stdout.strip().splitlines()[-1])
     except Exception as exc:  # noqa: BLE001
         names = []
@@ -158,7 +158,7 @@ def main():
         seed_board(db)
         env = dict(os.environ, HERMES_KANBAN_DB=db, HERMES_HOME=tmp)
         r = subprocess.run([sys.executable, READER, "--state", "blocked", "--json"],
-                           capture_output=True, text=True, timeout=120, env=env)
+                           capture_output=True, text=True, timeout=120, env=env, encoding="utf-8", errors="replace")
         try:
             data = json.loads(r.stdout)
         except ValueError:
@@ -171,15 +171,15 @@ def main():
               (cards[0]["reason"][:60] if cards else ""))
         check("it reports the block kind", bool(cards) and cards[0]["kind"] == "needs_input")
         empty = subprocess.run([sys.executable, READER, "--state", "running"],
-                               capture_output=True, text=True, timeout=120, env=env)
+                               capture_output=True, text=True, timeout=120, env=env, encoding="utf-8", errors="replace")
         check("an empty state is a result, not an error",
               empty.returncode == 0 and "0 card(s)" in empty.stdout, empty.stdout.strip()[:50])
         bad = subprocess.run([sys.executable, READER, "--state", "nope"],
-                             capture_output=True, text=True, timeout=120, env=env)
+                             capture_output=True, text=True, timeout=120, env=env, encoding="utf-8", errors="replace")
         check("an unknown state is refused", bad.returncode == 1 and "blocked|" in bad.stdout,
               bad.stdout.strip()[:50])
         live = subprocess.run([sys.executable, READER], capture_output=True, text=True, timeout=180,
-                              env=dict(os.environ, HERMES_HOME=PROFILE))
+                              env=dict(os.environ, HERMES_HOME=PROFILE), encoding="utf-8", errors="replace")
         check("the live board answers the default state",
               live.returncode == 0 and re.match(r"^diagnose: \d+ card\(s\) in state blocked$",
                                                 live.stdout.strip().splitlines()[0] or ""),

@@ -71,7 +71,7 @@ def check(name, ok, detail=""):
 
 def write(path, text, mode=None):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
     if mode:
         os.chmod(path, mode)
@@ -104,7 +104,7 @@ def setup():
 
 def cli(*args, timeout=180):
     return subprocess.run([WRAP, "kanban"] + [str(a) for a in args], env=ENV, capture_output=True, text=True,
-                          timeout=timeout)
+                          timeout=timeout, encoding="utf-8", errors="replace")
 
 
 def rows(sql, args=()):
@@ -191,14 +191,14 @@ def last_facts():
 
 def model_calls():
     try:
-        return len(open(CALLS).read().splitlines())
+        return len(open(CALLS, encoding="utf-8").read().splitlines())
     except OSError:
         return 0
 
 
 def coordinator(*args, timeout=300):
     r = subprocess.run([sys.executable, COORD, "--once", "--json"] + list(args), env=ENV, capture_output=True,
-                       text=True, timeout=timeout)
+                       text=True, timeout=timeout, encoding="utf-8", errors="replace")
     raw = r.stdout or ""
     try:
         report = json.JSONDecoder().raw_decode(raw[raw.find("{"):])[0]
@@ -214,7 +214,7 @@ def acted(report, cid):
 
 def cursor():
     try:
-        return json.load(open(os.path.join(HOME, "crew", "coordinator-cursor.json")))["last_event_id"]
+        return json.load(open(os.path.join(HOME, "crew", "coordinator-cursor.json"), encoding="utf-8"))["last_event_id"]
     except (OSError, ValueError, KeyError):
         return None
 
@@ -252,7 +252,7 @@ def main():
           "%s recurrences=%s kind=%s" % (c["status"], c["block_recurrences"], c["block_kind"]))
     check("B: exactly one model call was made and the cursor advanced", model_calls() == 1 and
           cursor() >= blocked_ev, "calls=%d cursor=%s" % (model_calls(), cursor()))
-    facts_named = open(CALLS).read().strip().splitlines()[-1]
+    facts_named = open(CALLS, encoding="utf-8").read().strip().splitlines()[-1]
     check("B: the facts file was handed to the model", facts_named.startswith("crew-coordinator-"), facts_named)
 
     # ---- repeat pass: nothing new, nothing done
@@ -327,12 +327,12 @@ def main():
     # ---- L: the lock
     lock = os.path.join(HOME, "crew", "coordinator.lock")
     write(lock, str(os.getpid()))
-    r = subprocess.run([sys.executable, COORD, "--once"], env=ENV, capture_output=True, text=True, timeout=120)
+    r = subprocess.run([sys.executable, COORD, "--once"], env=ENV, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
     check("L: a live pass blocks a second one", r.returncode == 3, "rc=%d" % r.returncode)
     dead = subprocess.Popen([sys.executable, "-c", "pass"])
     dead.wait()
     write(lock, str(dead.pid))
-    r = subprocess.run([sys.executable, COORD, "--once"], env=ENV, capture_output=True, text=True, timeout=120)
+    r = subprocess.run([sys.executable, COORD, "--once"], env=ENV, capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace")
     check("L: a dead pid's lock is taken over and released", r.returncode == 0 and not os.path.exists(lock),
           "rc=%d" % r.returncode)
 
@@ -352,7 +352,7 @@ def main():
           len(decisions(cid_n)) == 1 and model_calls() == calls_before, "%d decisions" % len(decisions(cid_n)))
     cid_n2 = new_card("proof card N2", proof="true")
     v = subprocess.run([sys.executable, os.path.join(HERE, "crew_card.py"), "verdict", "--card", cid_n2, "--by",
-                        "crew-worker"], env=ENV, capture_output=True, text=True, timeout=200)
+                        "crew-worker"], env=ENV, capture_output=True, text=True, timeout=200, encoding="utf-8", errors="replace")
     cli("complete", cid_n2, "--summary", "proven")
     coordinator()
     ds2 = decisions(cid_n2)
@@ -369,7 +369,7 @@ def main():
     vrc = []
     for _ in range(2):
         r = subprocess.run([sys.executable, os.path.join(HERE, "crew_card.py"), "verdict", "--card", cid_o, "--by",
-                            "crew-verifier"], env=ENV, capture_output=True, text=True, timeout=200)
+                            "crew-verifier"], env=ENV, capture_output=True, text=True, timeout=200, encoding="utf-8", errors="replace")
         vrc.append((r.returncode, r.stdout))
     back = rows("select payload from task_events where task_id = ? and kind = 'changes_requested'", (cid_o,))
     check("O: the second FAIL returns the review to its writer through request-changes",
@@ -386,7 +386,7 @@ def main():
     cli("claim", cid_p)
     for _ in range(2):
         r = subprocess.run([sys.executable, os.path.join(HERE, "crew_card.py"), "verdict", "--card", cid_p, "--by",
-                            "crew-worker"], env=ENV, capture_output=True, text=True, timeout=200)
+                            "crew-worker"], env=ENV, capture_output=True, text=True, timeout=200, encoding="utf-8", errors="replace")
     blk = card(cid_p)
     check("P: the second FAIL blocks the card as transient with the failure, not as a question to the owner",
           r.returncode == 3 and blk["status"] == "blocked" and blk["block_kind"] == "transient",
@@ -400,7 +400,7 @@ def main():
           ds and ds[-1].get("decision") == "retry" and ds[-1].get("applied") and model_calls() == calls_before + 1
           and card(cid_p)["status"] in ("ready", "todo"), "%s %s" % (card(cid_p)["status"], json.dumps(ds[-1:])[:80]))
     check("P: the coordinator's facts carried both FAIL lines (by the writer profile)",
-          len(re.findall(r"FAIL rc=1 by crew-worker", open(last_facts()).read() if last_facts() else "")) == 2,
+          len(re.findall(r"FAIL rc=1 by crew-worker", open(last_facts(), encoding="utf-8").read() if last_facts() else "")) == 2,
           last_facts() or "no facts file")
 
     if FAILS:

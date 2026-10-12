@@ -49,7 +49,7 @@ def profile_exists(name):
     """The host's own predicate, asked in its own interpreter - the call the dispatcher makes."""
     code = ("import sys;sys.path.insert(0,%r);"
             "from hermes_cli.profiles import profile_exists as pe;print(pe(%r))" % (AGENT, name))
-    p = subprocess.run([VENV_PY, "-c", code], capture_output=True, text=True, timeout=180)
+    p = subprocess.run([VENV_PY, "-c", code], capture_output=True, text=True, timeout=180, encoding="utf-8", errors="replace")
     return (p.stdout or "").strip() == "True"
 
 
@@ -82,7 +82,7 @@ def main():
 
         def pass_report(*extra):
             p = subprocess.run([sys.executable, COORD, "--once", "--json", "--since", "0"] + list(extra),
-                               env=env, capture_output=True, text=True, timeout=300)
+                               env=env, capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
             raw = p.stdout or ""
             try:
                 return json.JSONDecoder().raw_decode(raw[raw.find("{"):])[0]

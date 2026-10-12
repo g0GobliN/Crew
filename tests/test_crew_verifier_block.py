@@ -109,7 +109,7 @@ class VerifierBlockTests(unittest.TestCase):
         seen = []
 
         def decider(ctx, path):
-            seen.append(open(path).read())
+            seen.append(open(path, encoding="utf-8").read())
             return '{"decision": "retry", "fix": "replace every citation with a real, checked source"}', 0
 
         cid, out, _ = self.pass_for(decider)

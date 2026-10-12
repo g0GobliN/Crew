@@ -97,12 +97,12 @@ def main():
                     "print(kbd.check_respawn_guard(c,%r))" % (crew_proof_board.AGENT, db, cid))
             p = subprocess.run([crew_proof_board.VENV_PY, "-c", code], capture_output=True, text=True, timeout=180,
                                env=dict(os.environ, HERMES_HOME=os.environ.get("HERMES_HOME")
-                                        or os.path.expanduser("~/.hermes")))
+                                        or os.path.expanduser("~/.hermes")), encoding="utf-8", errors="replace")
             return (p.stdout or "").strip().splitlines()[-1:] and (p.stdout or "").strip().splitlines()[-1]
 
         def coordinator(*args):
             p = subprocess.run([sys.executable, COORD, "--once", "--json", "--since", "0"] + list(args), env=env,
-                               capture_output=True, text=True, timeout=300)
+                               capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
             raw = p.stdout or ""
             try:
                 return json.JSONDecoder().raw_decode(raw[raw.find("{"):])[0]

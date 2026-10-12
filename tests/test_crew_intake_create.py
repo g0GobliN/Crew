@@ -208,7 +208,7 @@ class FinishCreatedCardTests(IntakeCase):
         self.assertEqual("acme/ling-3.0", events["route"]["model"])
         progress = os.path.join(self.home, "crew", "progress", "t_new1.json")
         self.assertTrue(os.path.exists(progress))
-        self.assertEqual(["a", "b"], [u["unit"] for u in json.load(open(progress))["units"]])
+        self.assertEqual(["a", "b"], [u["unit"] for u in json.load(open(progress, encoding="utf-8"))["units"]])
 
     def test_a_failed_create_changes_nothing(self):
         self.open_intake()

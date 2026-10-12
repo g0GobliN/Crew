@@ -43,6 +43,13 @@ On native Windows the installer skips the systemd unit by itself, and `--no-cron
 hooks and the command menus are written exactly as on Linux. `NAME` is the profile you chat with
 (`default` if you do not use profiles). Use `python` or `py -3` wherever the docs say `python3`.
 
+Install [Git for Windows](https://git-scm.com/download/win) first. A proof command is a bash command, so crew
+runs every proof in Git Bash - no WSL needed. It looks for `bin\bash.exe` or `usr\bin\bash.exe` next to the
+`git.exe` on your `PATH`, and never uses `C:\Windows\System32\bash.exe`, which is WSL's and a different
+machine. Without Git for Windows the proof does not run and reports `Git Bash was not found next to git.exe:
+crew proofs run in Git Bash on Windows (install Git for Windows); the proof was not run`. Checking whether a
+worker process is alive, and stopping or parking a card, work natively too (`OpenProcess` and `taskkill /T /F`).
+
 ### 2. Run the dashboard without systemd
 
 The server binds `127.0.0.1:8799` (override with `CREW_GRAPH_PORT` / `CREW_GRAPH_BIND`):
@@ -84,6 +91,8 @@ The runtime failures on a host with no POSIX shell around the plugin are fixed i
 | `/crew-graph` → `unsupported operand type(s) for +: 'NoneType' and 'str'` | a child died before printing, leaving `stdout`/`stderr` `None` | None-safe stream concat |
 | coordinator / owner-comment child dies: `Could not determine home directory.` | native processes have `USERPROFILE` but no `HOME`, and CPython's `Path.home()` raises | `proof_env` cross-fills `HOME`/`USERPROFILE`, **Windows only** |
 | the plugin reads its config back as `None` | `PATH` can lead with a 0-byte `hermes` stub ahead of `bin\hermes.exe` | `_which_hermes()` skips PATH hits this OS cannot run |
+| a proof reports `Git Bash was not found next to git.exe` | on Windows a proof runs in Git Bash, and `git.exe` is missing from `PATH` or has no `bash.exe` beside it | install Git for Windows and reopen the terminal; crew never falls back to WSL's `bash.exe` or `cmd.exe` |
+| the install reports a consent-record or hook file-mode finding on Windows | Windows cannot express POSIX file modes (`0600`, the exec bit) | those two checks now run only on POSIX hosts; a Windows profile is protected by its ACLs |
 | the board's machine label is blank | `os.uname()` is POSIX-only | `platform.node()` |
 
 ## If you wire it up by hand

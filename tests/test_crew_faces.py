@@ -29,7 +29,7 @@ class RoleFaceTests(unittest.TestCase):
         self.assertIn(first, S.face_files())
         self.assertEqual(first, S.role_face("worker"))
         self.assertEqual(first, S.role_face("crew-worker"))                 # crew-<role> is <role>
-        with open(os.path.join(self.home, "crew", "faces.json")) as fh:
+        with open(os.path.join(self.home, "crew", "faces.json"), encoding="utf-8") as fh:
             self.assertEqual(first, json.load(fh)["worker"])
 
     def test_the_four_roles_get_four_different_faces(self):
@@ -38,7 +38,7 @@ class RoleFaceTests(unittest.TestCase):
 
     def test_a_saved_choice_survives_a_restart(self):
         os.makedirs(os.path.join(self.home, "crew"))
-        with open(os.path.join(self.home, "crew", "faces.json"), "w") as fh:
+        with open(os.path.join(self.home, "crew", "faces.json"), "w", encoding="utf-8") as fh:
             json.dump({"verifier": "blobs-07.svg"}, fh)
         self.assertEqual("blobs-07.svg", S.role_face("verifier"))
 

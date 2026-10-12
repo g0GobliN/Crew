@@ -48,7 +48,6 @@ Exit: 0 when every card it touched is down; 1 when one came back or could not be
 import argparse
 import json
 import os
-import signal
 import sqlite3
 import subprocess
 import sys
@@ -59,6 +58,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import crew_card  # noqa: E402
+import crew_proc  # noqa: E402
 
 # The board this acts on: the same resolution the rest of the crew uses (crew_card.kanban_db: a pinned
 # HERMES_KANBAN_DB / KANBAN_DB, else the board under this HERMES_HOME). A hard-coded ~/.hermes/kanban.db ignored
@@ -177,32 +177,11 @@ def alive(pid):
     that reported "still alive" for a process it had just killed would be wrong (it did, on the first
     live run of this pass).
     """
-    try:
-        pid = int(pid)
-    except (TypeError, ValueError):
-        return False
-    try:
-        with open("/proc/%d/stat" % pid) as fh:
-            state = fh.read().rsplit(") ", 1)[-1][:1]
-        if state == "Z":
-            return False
-    except OSError:
-        pass
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except (PermissionError, ValueError):
-        return True
+    return crew_proc.alive(pid)
 
 
 def cmdline_of(pid):
-    try:
-        with open("/proc/%d/cmdline" % int(pid)) as fh:
-            return fh.read().replace("\0", " ")
-    except OSError:
-        return ""
+    return crew_proc.cmdline_of(pid)
 
 
 def kill_run(run, card_id, dry):
@@ -213,25 +192,7 @@ def kill_run(run, card_id, dry):
         return "refused pid %s (not this card's worker%s)" % (pid, "" if cmd else ": command line unreadable"), False
     if dry:
         return "would kill run %s pid %s" % (run["id"], pid), True
-    try:
-        pgid = os.getpgid(pid)
-    except ProcessLookupError:
-        return "gone run %s pid %s" % (run["id"], pid), False
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(pgid, sig)
-        except ProcessLookupError:
-            break
-        time.sleep(TERM_WAIT_S)
-        if not alive(pid):
-            break
-    if alive(pid):
-        # The group was gone but the pid answers: signal the pid itself rather than report a kill
-        # that did not land.
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            pass
+    crew_proc.terminate_tree(pid, TERM_WAIT_S)
     return "run %s pid %s %s" % (run["id"], pid, "dead" if not alive(pid) else "STILL ALIVE"), not alive(pid)
 
 
@@ -314,7 +275,7 @@ def archive_card(card_id, dry):
     if dry:
         return 0, ""
     done = subprocess.run([crew_card.hermes_bin(), "kanban", "archive", card_id], capture_output=True, text=True,
-                          timeout=120, env=dict(os.environ, HERMES_KANBAN_DB=KANBAN_DB))
+                          timeout=120, env=dict(os.environ, HERMES_KANBAN_DB=KANBAN_DB), encoding="utf-8", errors="replace")
     return 1 if done.returncode == 0 else 0, (done.stdout + done.stderr).strip()
 
 
@@ -346,7 +307,7 @@ def park_card(card_id, dry):
     if dry:
         return "would %s" % argv[0], ""
     done = subprocess.run([crew_card.hermes_bin(), "kanban"] + argv, capture_output=True, text=True, timeout=120,
-                          env=dict(os.environ, HERMES_KANBAN_DB=KANBAN_DB))
+                          env=dict(os.environ, HERMES_KANBAN_DB=KANBAN_DB), encoding="utf-8", errors="replace")
     return argv[0] if done.returncode == 0 else "%s refused" % argv[0], (done.stdout + done.stderr).strip()
 
 
@@ -449,4 +410,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    crew_proc.utf8_stdio()
     sys.exit(main())

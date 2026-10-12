@@ -142,7 +142,7 @@ class RunnerTest(BoardCase):
                             r"create_card|open_card|sqlite3\.connect\((?!.*mode=ro)", re.I)
         for name in crew_proofs.LIVE_READERS:
             self.assertIn(name, crew_proofs.candidates())
-            self.assertFalse(writes.search((SCRIPTS / name).read_text()), name)
+            self.assertFalse(writes.search((SCRIPTS / name).read_text(encoding="utf-8")), name)
             self.assertNotIn(name, crew_proofs.LIVE)
 
     def test_no_other_proof_defaults_to_the_live_board_file(self):
@@ -151,7 +151,7 @@ class RunnerTest(BoardCase):
         for path in sorted(SCRIPTS.glob("*.py")):
             if path.name in crew_proofs.LIVE_BOARD or not re.search(r"(_proof|_check)\.py$|live_walk", path.name):
                 continue
-            if rx.search(path.read_text()):
+            if rx.search(path.read_text(encoding="utf-8")):
                 bad.append(path.name)
         self.assertEqual(bad, [])
 
@@ -159,7 +159,7 @@ class RunnerTest(BoardCase):
         writes = re.compile(r"sqlite3\.connect\((?:KANBAN_DB|DB)[,)]")
         unguarded = []
         for path in sorted(SCRIPTS.glob("*_proof.py")):
-            text = path.read_text()
+            text = path.read_text(encoding="utf-8")
             if path.name in crew_proofs.LIVE_BOARD or not writes.search(text):
                 continue
             if "crew_proof_board" not in text and "init_board" not in text:

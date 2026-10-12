@@ -167,7 +167,7 @@ class WatchTests(unittest.TestCase):
         import subprocess
         out = subprocess.run([sys.executable, str(REPO / "scripts" / "crew_card.py"), "watch", "--card", cid,
                               "--poll", "1", "--lifetime", "5"], capture_output=True, text=True, timeout=60,
-                             env=dict(os.environ))
+                             env=dict(os.environ), encoding="utf-8", errors="replace")
         self.assertEqual(0, out.returncode, out.stderr)
         self.assertIn("done · %s" % cid, out.stdout)
 

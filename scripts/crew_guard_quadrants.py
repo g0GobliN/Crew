@@ -77,9 +77,9 @@ def main():
         rec = tool.record_verdict(CARD, command, rc, "out", 0.1, by=by)
         if age:
             path = tool.verdict_path(CARD)
-            lines = [json.loads(x) for x in open(path)]
+            lines = [json.loads(x) for x in open(path, encoding="utf-8")]
             lines[-1]["ts"] -= age
-            with open(path, "w") as fh:
+            with open(path, "w", encoding="utf-8") as fh:
                 fh.write("".join(json.dumps(x) + "\n" for x in lines))
         return rec
 

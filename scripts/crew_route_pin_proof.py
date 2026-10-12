@@ -44,7 +44,7 @@ def check(name, ok, detail=""):
 
 
 def run(cmd, timeout=180):
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace")
 
 
 def worker_providers():
@@ -221,7 +221,7 @@ def main():
           "page says %s via %s" % (card_node_evidence(PROBE).get("model_override"),
                                    card_node_evidence(PROBE).get("provider_override")))
     term = subprocess.run([sys.executable, os.path.join(HERE, "crew_graph.py"), "--card", PROBE],
-                          capture_output=True, text=True, timeout=120).stdout or ""
+                          capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace").stdout or ""
     check("the terminal render names the pinned model too",
           "worker model: %s" % (pick or {}).get("model") in term,
           [l.strip() for l in term.splitlines() if "worker model" in l][:1])

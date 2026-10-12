@@ -95,7 +95,7 @@ def hook_call(card, status_code=429, error="rate limit exceeded", model="claude-
     env = dict(os.environ, HERMES_HOME=crew_card.profile_home("crew-worker"),
                HERMES_KANBAN_TASK=card, HERMES_KANBAN_RUN_ID="4242", KANBAN_DB=KANBAN_DB)
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=180,
-                       env=env, cwd=HERE)
+                       env=env, cwd=HERE, encoding="utf-8", errors="replace")
     try:
         return json.loads((r.stdout or "").strip().splitlines()[-1])
     except Exception:

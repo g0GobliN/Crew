@@ -38,7 +38,7 @@ def hermes_src():
     exe = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
     try:
         out = subprocess.run([exe, "--print-runtime-command"], capture_output=True, text=True,
-                             timeout=60).stdout
+                             timeout=60, encoding="utf-8", errors="replace").stdout
         m = re.search(r"sys\.path\.insert\(0, '([^']+)'\)", out)
         if m and os.path.isdir(m.group(1)):
             return m.group(1)
@@ -115,4 +115,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import crew_proc
+    crew_proc.utf8_stdio()
     sys.exit(main())

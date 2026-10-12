@@ -115,7 +115,7 @@ def main():
     problems, unclear, checked = [], [], 0
     for path in modules():
         try:
-            tree = ast.parse(open(path).read(), path)
+            tree = ast.parse(open(path, encoding="utf-8").read(), path)
         except SyntaxError as exc:
             problems.append({"file": path, "line": exc.lineno, "code": "syntax error: %s" % exc})
             continue

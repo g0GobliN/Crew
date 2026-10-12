@@ -103,7 +103,7 @@ def run_one(name, timeout, extra=()):
     path = os.path.join(HERE, name)
     try:
         p = subprocess.run([sys.executable, path] + list(extra), cwd=HERE, capture_output=True,
-                           text=True, timeout=timeout, env=child_env(name), stdin=subprocess.DEVNULL)
+                           text=True, timeout=timeout, env=child_env(name), stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
         out = (p.stdout or "") + (p.stderr or "")
         rc = p.returncode
     except subprocess.TimeoutExpired:
@@ -161,7 +161,7 @@ def changed_since(rev):
             if proof in picked:
                 continue
             try:
-                if re.search(r"\b%s\b" % re.escape(stem), open(os.path.join(HERE, proof)).read()):
+                if re.search(r"\b%s\b" % re.escape(stem), open(os.path.join(HERE, proof), encoding="utf-8").read()):
                     picked.append(proof)
             except OSError:
                 continue

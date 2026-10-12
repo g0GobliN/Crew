@@ -55,11 +55,11 @@ def write_approval(home, event, script):
     """What Hermes itself records when the owner confirms a hook (agent/shell_hooks.py): the fixture's stand-in
     for the owner's consent. The installer has no such writer."""
     path = os.path.join(home, CI.ALLOWLIST_NAME)
-    data = json.load(open(path)) if os.path.exists(path) else {"approvals": []}
+    data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {"approvals": []}
     data["approvals"] = [e for e in data["approvals"] if (e["event"], e["command"]) != (event, script)]
     data["approvals"].append({"event": event, "command": script, "approved_at": CI._iso(time.time()),
                               "script_mtime_at_approval": CI._mtime_iso(script)})
-    with open(path, "w") as fh:
+    with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh)
     os.chmod(path, 0o600)
 
@@ -73,12 +73,12 @@ def fixture(root, name, pairs, approve=True, mode=0o600, drift=False, executable
         lines += ["  %s:" % event, "    - matcher: terminal", "      command: %s" % script,
                   "      timeout: 10"]
     lines += ["  output_spill:", "    max_chars: 19000", "hooks_auto_accept: false"]
-    with open(os.path.join(home, "config.yaml"), "w") as fh:
+    with open(os.path.join(home, "config.yaml"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
     for _event, script in pairs:
         if missing:
             continue
-        with open(script, "w") as fh:
+        with open(script, "w", encoding="utf-8") as fh:
             fh.write("#!/usr/bin/env python3\nprint('{}')\n")
         os.chmod(script, 0o755 if executable else 0o644)
         if drift:
@@ -152,7 +152,7 @@ def main():
         i = fixture(root, "written", [("pre_tool_call", os.path.join(i_home, "hooks", "one.py"))],
                     approve=False)
         write_approval(i, "pre_tool_call", os.path.join(i_home, "hooks", "one.py"))
-        entry = json.load(open(os.path.join(i, CI.ALLOWLIST_NAME)))["approvals"][0]
+        entry = json.load(open(os.path.join(i, CI.ALLOWLIST_NAME), encoding="utf-8"))["approvals"][0]
         check("an entry in the runtime's own shape passes the gate",
               CI.permission_problems(i) == [] and sorted(entry) == ["approved_at", "command", "event",
                                                                     "script_mtime_at_approval"],
@@ -160,7 +160,7 @@ def main():
 
         # 9: the installer cannot approve
         check("install.py has no approval writer and sets no HERMES_ACCEPT_HOOKS",
-              not hasattr(CI, "_approve") and "HERMES_ACCEPT_HOOKS" not in open(INSTALL).read())
+              not hasattr(CI, "_approve") and "HERMES_ACCEPT_HOOKS" not in open(INSTALL, encoding="utf-8").read())
 
         # 10: the step reports, with Hermes's own flow, and writes nothing
         j_home = os.path.join(root, "stepped")
@@ -212,7 +212,7 @@ def main():
         check("install.py wires the permissions step into its step list", "permissions" in steps, steps)
         r = subprocess.run([sys.executable, INSTALL, "--check", "--no-service", "--no-cron",
                             "--no-profiles", "--profile", crew_card.owner_profile()],
-                           capture_output=True, text=True, timeout=300)
+                           capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
         out = r.stdout + r.stderr
         # another step may legitimately want to copy a file this proof just created; the gate's own
         # row is what this check owns

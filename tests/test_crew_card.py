@@ -46,7 +46,7 @@ class CardTestCase(unittest.TestCase):
     def write(self, relpath, text):
         path = os.path.join(self.home, relpath)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as fh:
+        with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
         return path
 
@@ -184,7 +184,7 @@ class RolesJsonTests(CardTestCase):
     """default_budget(role) / budget_floor(): read from roles/roles.json, never hardcoded."""
 
     def repo_roles(self):
-        with open(REPO / "roles" / "roles.json") as fh:
+        with open(REPO / "roles" / "roles.json", encoding="utf-8") as fh:
             return json.load(fh)
 
     def test_repo_roles_json_supplies_each_role_budget(self):
@@ -268,7 +268,7 @@ class FixtureAssigneeTests(unittest.TestCase):
         import re
         scripts = Path(crew_card.__file__).resolve().parent
         for name in ("crew_heal_proof.py", "crew_probe_skip_proof.py"):
-            text = (scripts / name).read_text()
+            text = (scripts / name).read_text(encoding="utf-8")
             inserts = re.findall(r"insert into tasks.*?values.*?\n.*?\n", text, re.S)
             self.assertTrue(inserts, name)
             for chunk in inserts:
@@ -573,7 +573,7 @@ class VerdictLineTests(CardTestCase):
         rec = crew_card.record_verdict("t_v", self.PROOF, 0, "ok", 0.5)
         self.assertEqual("default", rec["by"])
         self.assertEqual(42, rec["run_id"])
-        with open(crew_card.verdict_path("t_v")) as fh:
+        with open(crew_card.verdict_path("t_v"), encoding="utf-8") as fh:
             line = json.loads(fh.read())
         self.assertEqual(("default", 42, "PASS"), (line["by"], line["run_id"], line["verdict"]))
         self.assertNotIn("profile", line)
@@ -607,10 +607,10 @@ class VerdictLineTests(CardTestCase):
         rec = crew_card.record_verdict("t_v", command or self.PROOF, rc, "", 0, by=by)
         if ts is not None:
             path = crew_card.verdict_path("t_v")
-            with open(path) as fh:
+            with open(path, encoding="utf-8") as fh:
                 lines = [json.loads(x) for x in fh]
             lines[-1]["ts"] = ts
-            with open(path, "w") as fh:
+            with open(path, "w", encoding="utf-8") as fh:
                 fh.write("".join(json.dumps(x) + "\n" for x in lines))
         return rec
 
