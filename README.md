@@ -15,7 +15,7 @@
 ![Verified results](https://img.shields.io/badge/-verified%20results-161b22?style=flat-square)
 ![Self-hosted](https://img.shields.io/badge/-self--hosted-161b22?style=flat-square)
 
-[Website](https://crew.forgecoreai.com) · [Watch the 53 s film](https://crew.forgecoreai.com/#board) · [Install](#install) · [Commercial](#commercial-services) · [Reference](REFERENCE.md)
+[Website](https://crew.forgecoreai.com) · [Watch the 53 s film](https://crew.forgecoreai.com/#board) · [Install](#install) · [Windows](WINDOWS.md) · [Commercial](#commercial-services) · [Reference](REFERENCE.md)
 
 ---
 
@@ -73,6 +73,10 @@ hermes -p NAME plugins doctor crew
 `NAME` is the profile you chat with (`default` if you do not use profiles). Running the installer twice
 changes nothing; `--check` is a dry run that prints exactly what would change. The installer never asks
 anything and never approves a shell hook for you.
+
+> **On Windows?** The two steps above that assume systemd and cron (the graph-http service and
+> `--nightly-proofs`) have no native equivalent. See **[WINDOWS.md](WINDOWS.md)** - run it under WSL
+> unchanged, or install natively with `--no-service --no-cron` and start the dashboard yourself.
 
 ### What `install.py` changes
 
