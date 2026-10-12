@@ -11,17 +11,35 @@ WSL is a POSIX host, so the [README](README.md) install works exactly as written
 service and `--nightly-proofs`. Use `python3` and `~/.hermes` paths as documented. This is the route to
 take if you want the nightly proofs and the self-starting dashboard with no manual steps.
 
+WSL2 starts with systemd switched off, and `systemctl --user` fails until it is on. Turn it on once:
+
+```sh
+# inside WSL
+printf '\n[boot]\nsystemd=true\n' | sudo tee -a /etc/wsl.conf
+# then in Windows PowerShell
+wsl --shutdown
+# back in the distro, this should print systemd
+ps -p 1 -o comm=
+```
+
 ## Route B - Native Windows ("This device" Hermes Desktop)
 
 ### 1. Install, skipping the two POSIX-only steps
 
+The plugin is installed into the profile's own plugin folder. Point `CREW` at it first:
+
 ```bat
-py -3 %LOCALAPPDATA%\hermes\plugins\crew\install.py --profile NAME --no-service --no-cron
-py -3 %LOCALAPPDATA%\hermes\plugins\crew\install.py --check --profile NAME
+rem a named profile
+set CREW=%LOCALAPPDATA%\hermes\profiles\NAME\plugins\crew
+rem or the default profile
+set CREW=%LOCALAPPDATA%\hermes\plugins\crew
+
+py -3 %CREW%\install.py --profile NAME --no-cron
+py -3 %CREW%\install.py --check --profile NAME
 hermes -p NAME plugins doctor crew
 ```
 
-`--no-service` and `--no-cron` skip **only** the systemd unit and the cron job. Role profiles, skills,
+On native Windows the installer skips the systemd unit by itself, and `--no-cron` skips the cron job. Role profiles, skills,
 hooks and the command menus are written exactly as on Linux. `NAME` is the profile you chat with
 (`default` if you do not use profiles). Use `python` or `py -3` wherever the docs say `python3`.
 
@@ -30,14 +48,14 @@ hooks and the command menus are written exactly as on Linux. `NAME` is the profi
 The server binds `127.0.0.1:8799` (override with `CREW_GRAPH_PORT` / `CREW_GRAPH_BIND`):
 
 ```bat
-py -3 %LOCALAPPDATA%\hermes\plugins\crew\scripts\crew_graph_serve.py
+py -3 %CREW%\scripts\crew_graph_serve.py
 ```
 
 Open `http://127.0.0.1:8799/`. To keep it up across reboots, register a logon task (no admin needed):
 
 ```bat
 schtasks /Create /TN CrewGraphHttp /SC ONLOGON /RL LIMITED ^
-  /TR "py -3 %LOCALAPPDATA%\hermes\plugins\crew\scripts\crew_graph_serve.py"
+  /TR "py -3 %CREW%\scripts\crew_graph_serve.py"
 ```
 
 An `HKCU\...\CurrentVersion\Run` entry works too.

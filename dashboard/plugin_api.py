@@ -16,12 +16,15 @@ Proxies an allowlisted set of routes to the local crew_graph_serve daemon
 from __future__ import annotations
 
 import html
+import logging
 import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from fastapi import APIRouter, HTTPException, Request, Response
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -309,10 +312,12 @@ def _forward_request(url: str, request: Request, body: bytes | None = None) -> R
     except urllib.error.HTTPError as exc:
         return Response(content=exc.read(), status_code=exc.code, media_type=exc.headers.get("Content-Type", "text/plain"))
     except Exception as exc:
+        # the exception text stays in the server log; the page names only the address it tried
+        _log.warning("crew dashboard proxy: %s unreachable: %s", UPSTREAM, exc)
         return Response(
             content=(
                 "<html><body><h3>Crew Dashboard Unavailable</h3><p>Could not reach "
-                f"{html.escape(UPSTREAM)} ({html.escape(str(exc))}). Ensure the crew daemon is running.</p></body></html>"
+                f"{html.escape(UPSTREAM)}. Ensure the crew daemon is running.</p></body></html>"
             ),
             status_code=502,
             media_type="text/html",

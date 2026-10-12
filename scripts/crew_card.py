@@ -296,6 +296,16 @@ def kanban_db():
     return _kanban_db_fallback()
 
 
+def board_slug(db=None):
+    """The board name for the header, read off the same file kanban_db() picked, so the name and the cards
+    shown can never disagree: <kanban home>/kanban/boards/<slug>/kanban.db -> slug, anything else -> default."""
+    db = db or kanban_db() or ""
+    parts = os.path.normpath(db).split(os.sep)
+    if len(parts) >= 4 and parts[-4:-2] == ["kanban", "boards"] and parts[-1] == "kanban.db":
+        return parts[-2]
+    return DEFAULT_BOARD
+
+
 def card_row(card_id):
     db = kanban_db()
     if not db:

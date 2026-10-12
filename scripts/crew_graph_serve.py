@@ -418,7 +418,7 @@ def board_page(include_all=False, nonce=None):
             "<div id=notes hidden><div class=nh><span id=notehead>%s</span>"
             "<button id=clearall title='clear every listed row'>clear all</button></div>"
             "<div id=noterows></div></div></span>"
-            "<span class=node>%s - kanban <a class=tailnet href='%s/'>link</a>"
+            "<span class=node>%s - kanban%s <a class=tailnet href='%s/'>link</a>"
             "</span></span></header>"
             "<main id=board></main>"
             # The helpers that draw a lane live at the END of the script body, so the first paint has
@@ -428,7 +428,7 @@ def board_page(include_all=False, nonce=None):
             % (CG.favicon_link(), css, CG.logo_link(), cards_word(data.get("cards")), live_word(data.get("live")),
                board_counts(data.get("counts")), notes_hint(data.get("attention")),
                BELL_SVG, notes_total(data.get("attention")), attention_head(data.get("attention")),
-               esc(platform.node()), esc(CG.crew_card.dashboard_url()),
+               esc(platform.node()), board_label(), esc(CG.crew_card.dashboard_url()),
                (' nonce="%s"' % esc(nonce)) if nonce else "", js_data(data),
                CG.dashboard_asset("lib.js", "board.js")))
 
@@ -436,6 +436,12 @@ def board_page(include_all=False, nonce=None):
 # The header's status counts, one owner for the page and the script: (tone class, word, statuses).
 HEADER_COUNTS = (("running", "running", ("running",)), ("blocked", "blocked", ("blocked", "triage")),
                  ("done", "done", ("done",)))
+
+
+def board_label():
+    """' <slug>' after 'kanban' in the header when the active board is not the default one, else ''."""
+    slug = CG.crew_card.board_slug()
+    return "" if slug == CG.crew_card.DEFAULT_BOARD else " " + esc(slug)
 
 
 def cards_word(n):

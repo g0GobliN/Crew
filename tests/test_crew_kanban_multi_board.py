@@ -179,6 +179,21 @@ class FallbackResolutionTests(ResolverTestCase):
             self.assertSamePath(k_root_db, crew_card.kanban_db())
 
 
+class BoardSlugTests(unittest.TestCase):
+    def test_slug_is_read_off_the_resolved_file(self):
+        root = os.path.join(os.sep, "h", "kanban")
+        self.assertEqual(crew_card.board_slug(os.path.join(root, "kanban", "boards", "launch", "kanban.db")), "launch")
+        self.assertEqual(crew_card.board_slug(os.path.join(root, "kanban.db")), crew_card.DEFAULT_BOARD)
+        self.assertEqual(crew_card.board_slug(os.path.join(root, "pinned.db")), crew_card.DEFAULT_BOARD)
+
+    def test_slug_follows_kanban_db(self):
+        with mock.patch.object(crew_card, "kanban_db",
+                               return_value=os.path.join("x", "kanban", "boards", "ops", "kanban.db")):
+            self.assertEqual(crew_card.board_slug(), "ops")
+        with mock.patch.object(crew_card, "kanban_db", return_value=None):
+            self.assertEqual(crew_card.board_slug(), crew_card.DEFAULT_BOARD)
+
+
 class DelegationTests(ResolverTestCase):
     def test_hermes_resolver_decides_where_importable_and_every_entry_point_uses_it(self):
         fake_kb = types.SimpleNamespace(kanban_db_path=lambda: Path(self.board_db))
