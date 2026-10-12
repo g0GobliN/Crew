@@ -154,5 +154,31 @@ class HomeVars(unittest.TestCase):
         self.assertNotIn("USERPROFILE", env)
 
 
+class InstallerGraphUnit(unittest.TestCase):
+    """install.py's graph-http step is the one step with no native Windows equivalent (no systemd --user):
+    it must SKIP on win32 without --no-service and shell out to nothing, while --no-service still works on
+    POSIX."""
+
+    def setUp(self):
+        self.mod = load("crew_install_unit", "install.py")
+
+    def test_win32_skips_without_the_flag(self):
+        with mock.patch.object(sys, "platform", "win32"), \
+             mock.patch.object(self.mod.subprocess, "run",
+                               side_effect=AssertionError("systemctl run on Windows")) as run:
+            status, msg = self.mod.step_graph_unit(tempfile.mkdtemp(), apply=True, no_service=False)
+        self.assertEqual(status, "SKIP")
+        self.assertIn("WINDOWS.md", msg)
+        run.assert_not_called()
+
+    def test_posix_honours_no_service_flag(self):
+        with mock.patch.object(sys, "platform", "linux"), \
+             mock.patch.object(self.mod.subprocess, "run",
+                               side_effect=AssertionError("systemctl run with --no-service")):
+            status, msg = self.mod.step_graph_unit(tempfile.mkdtemp(), apply=True, no_service=True)
+        self.assertEqual(status, "SKIP")
+        self.assertIn("--no-service", msg)
+
+
 if __name__ == "__main__":
     unittest.main()

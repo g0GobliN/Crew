@@ -817,6 +817,11 @@ def render_graph_unit(profile_home, port=GRAPH_PORT):
 
 
 def step_graph_unit(profile_home, apply, no_service, port=GRAPH_PORT):
+    if sys.platform == "win32":
+        # There is no systemd --user on native Windows: writing a unit file would only leave a dead file
+        # and the enable/restart would silently no-op. Skip it and say how to get the dashboard up instead.
+        return "SKIP", ("graph http: native Windows has no systemd unit - run scripts/crew_graph_serve.py, "
+                        "or autostart it (`schtasks /Create /SC ONLOGON ...`); see WINDOWS.md")
     if no_service:
         return "SKIP", "graph http unit (--no-service)"
     unit = render_graph_unit(profile_home, port)
@@ -1405,7 +1410,10 @@ def report(profile, profile_home, args):
     print("graph script: %s (%s)" % (graph_path, "present" if os.path.exists(graph_path) else "MISSING"))
     roles_path = os.path.join(profile_home, "roles", "crew", "roles.json")
     print("roles file: %s (%s)" % (roles_path, "present" if os.path.exists(roles_path) else "MISSING"))
-    if args.no_service:
+    if sys.platform == "win32":
+        print("graph http: no systemd unit on native Windows - run scripts/crew_graph_serve.py "
+              "on http://127.0.0.1:%d/ (see WINDOWS.md)" % args.graph_port)
+    elif args.no_service:
         print("graph http: skipped (--no-service)")
     else:
         gact = subprocess.run(["systemctl", "--user", "is-active", UNIT_GRAPH_NAME],
