@@ -195,6 +195,9 @@ def board_data(include_all=False, older=False):
             active = {"profile": profile, "run": live[0][0],
                       "for_s": int(now - (live[0][4] or now)),
                       "quiet_s": int(now - (beat or now)) if beat else None}
+            # what this run has verifiably done, read off its own session: the step count and the tool it is
+            # in. Facts only - the tile says nothing about how long is left (issue #9 option 1).
+            active.update(CG.live_run_facts(db, tid, live[0][0], live[0][2]))
         else:
             active = None
         ended = completed or (my_runs[-1][5] if my_runs and my_runs[-1][5] else None)
