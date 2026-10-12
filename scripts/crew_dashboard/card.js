@@ -1,9 +1,9 @@
 
-var DATA = %(json_name)s;
-var INITIAL = %(initial)s;
+var DATA = __CREW_JSON_NAME__;
+var INITIAL = __CREW_INITIAL__;
 var POLL_MS = 2000;
 var NS = "http" + ":" + "//www.w3.org/2000/svg";
-var COLOUR = %(colours)s;
+var COLOUR = __CREW_COLOURS__;
 var CHIP = {pending:"var(--crew-tone-review)", ok:"var(--crew-tone-neutral)", err:"var(--crew-tone-blocked)"};
 // a tool call still in flight ticks a stopwatch beside its chip, like a live terminal counter
 function tickChips(){

@@ -1,0 +1,69 @@
+name: Bug report
+description: Something in Crew is broken or behaves wrongly.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search [existing issues](https://github.com/macd2/Crew/issues) first. For a security problem, use
+        [private reporting](https://github.com/macd2/Crew/security/advisories/new) instead.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What did you expect, and what happened instead? Include error text.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that triggers it. Include the `/crew` ask if one was involved.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected part
+      multiple: true
+      options:
+        - Card contract / proof command
+        - Coordinator
+        - Board (web dashboard)
+        - Installer
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: crew-version
+    attributes:
+      label: Crew version
+      description: "`version:` in plugin.yaml"
+    validations:
+      required: true
+  - type: input
+    id: hermes-version
+    attributes:
+      label: Hermes Agent version
+      description: Output of `hermes --version`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: e.g. Windows 11 native, Ubuntu 24.04 in WSL, macOS 15
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version`
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Remove anything private (keys, paths with your username) before pasting.
+      render: shell

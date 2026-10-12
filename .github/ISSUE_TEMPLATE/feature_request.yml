@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a new feature or talk through an idea before building it.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. For bigger features, shaping the design here first saves you work. Search
+        [existing issues](https://github.com/macd2/Crew/issues) first. See
+        [CONTRIBUTING.md](https://github.com/macd2/Crew/blob/main/CONTRIBUTING.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today, or what goes wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How should it work? Be specific, for example commands, config keys or board behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you consider, and why is this better?
+  - type: textarea
+    id: fit
+    attributes:
+      label: How does this serve the ask-once / verified-result flow or the board?
+      description: Crew's promise is that you ask once and a coordinator owns the card until its proof passes.
+    validations:
+      required: true
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Would you implement it?
+      options:
+        - "Yes"
+        - "Yes, with some help"
+        - "No, I am only proposing it"
