@@ -50,7 +50,7 @@ def seed(conn, cid, status, origin=True, events=()):
     if origin:
         body += "Origin: %s\n" % ORIGIN
     conn.execute("insert into tasks values (?,?,?,?,?,?,?,?,?)",
-                 (cid, "PROBE %s" % cid, body, status, "crew-worker", now - 60, now if status == "done" else None,
+                 (cid, "PROBE %s" % cid, body, status, crew_card.FIXTURE_ASSIGNEE, now - 60, now if status == "done" else None,
                   "probe result", None))
     for kind, payload in events:
         conn.execute("insert into task_events (task_id, kind, payload, created_at) values (?,?,?,?)",

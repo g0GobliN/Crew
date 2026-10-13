@@ -6,6 +6,8 @@ import importlib.util
 import os
 import platform
 import sqlite3
+import pathlib
+import shutil
 import sys
 import tempfile
 import unittest
@@ -180,6 +182,48 @@ class InstallerGraphUnit(unittest.TestCase):
             status, msg = self.mod.step_graph_unit(tempfile.mkdtemp(), apply=True, no_service=True)
         self.assertEqual(status, "SKIP")
         self.assertIn("--no-service", msg)
+
+    def _active_unit(self, calls):
+        """An installed, identical, running unit: systemctl answers `active` and every call is recorded."""
+        home = tempfile.mkdtemp()
+        unit_dir = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, home, True)
+        self.addCleanup(shutil.rmtree, str(unit_dir), True)
+        with mock.patch.object(sys, "platform", "linux"):     # the unit text depends on the platform
+            unit = self.mod.render_graph_unit(home, 8799)
+        (unit_dir / self.mod.UNIT_GRAPH_NAME).write_bytes(unit.encode())
+
+        def fake(cmd, **kw):
+            calls.append(cmd)
+            return mock.Mock(stdout="active\n", returncode=0)
+        return home, unit_dir, fake
+
+    def test_an_upgrade_restarts_a_running_daemon_that_loaded_the_old_code(self):
+        calls = []
+        home, unit_dir, fake = self._active_unit(calls)
+        with mock.patch.object(sys, "platform", "linux"), mock.patch.object(self.mod, "UNIT_DIR", unit_dir), \
+             mock.patch.object(self.mod.subprocess, "run", fake):
+            status, msg = self.mod.step_graph_unit(home, True, False, 8799, code_changed=True)
+        self.assertEqual(status, "CHANGED")
+        self.assertIn(["systemctl", "--user", "restart", self.mod.UNIT_GRAPH_NAME], calls)
+
+    def test_no_code_change_leaves_a_running_daemon_alone(self):
+        calls = []
+        home, unit_dir, fake = self._active_unit(calls)
+        with mock.patch.object(sys, "platform", "linux"), mock.patch.object(self.mod, "UNIT_DIR", unit_dir), \
+             mock.patch.object(self.mod.subprocess, "run", fake):
+            status, _ = self.mod.step_graph_unit(home, True, False, 8799, code_changed=False)
+        self.assertEqual(status, "OK")
+        self.assertFalse([c for c in calls if "restart" in c])
+
+    def test_a_check_run_reports_the_restart_without_doing_it(self):
+        calls = []
+        home, unit_dir, fake = self._active_unit(calls)
+        with mock.patch.object(sys, "platform", "linux"), mock.patch.object(self.mod, "UNIT_DIR", unit_dir), \
+             mock.patch.object(self.mod.subprocess, "run", fake):
+            status, _ = self.mod.step_graph_unit(home, False, False, 8799, code_changed=True)
+        self.assertEqual(status, "CHANGED")
+        self.assertFalse([c for c in calls if "restart" in c])
 
 
 if __name__ == "__main__":

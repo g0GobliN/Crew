@@ -38,6 +38,7 @@ PROFILE = os.path.dirname(os.path.abspath(__file__))
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
+import crew_card  # noqa: E402 - the fixture assignee and the probe marker
 import crew_proof_board  # noqa: E402
 KANBAN_DB = crew_proof_board.proof_db()
 BASE = crew_proof_board.graph_base()
@@ -65,9 +66,9 @@ def seed_probe():
         body = ("Goal: probe the card page's terminal window.\n"
                 "Proof command: python3 crew_terminal_window_proof.py\n"
                 "Done when: the window holds six lines.\n")
-        conn.execute("insert into tasks (id, title, body, status, assignee, priority, created_at) "
-                     "values (?,?,?,'done','crew-worker',0,?)",
-                     (PROBE, "PROBE terminal window", body, now - 300))
+        conn.execute("insert into tasks (id, title, body, status, assignee, priority, created_by, created_at) "
+                     "values (?,?,?,'done',?,0,?,?)",
+                     (PROBE, "PROBE terminal window", body, crew_card.FIXTURE_ASSIGNEE, crew_card.PROBE_OWNER, now - 300))
         # The run is LIVE on purpose: a session with ended_at NULL on a settled run is the killed-worker
         # case, and the page now (correctly) draws that as done. A fixture that wants a live node has to
         # say so in the run row too - the run is what decides a node's state.

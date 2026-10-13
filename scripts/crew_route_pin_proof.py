@@ -29,6 +29,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
+import crew_card  # noqa: E402 - the fixture assignee and the probe marker
 import crew_proof_board  # noqa: E402
 KANBAN_DB = crew_proof_board.proof_db()
 VENV_PY = os.environ.get("CREW_PY") or crew_proof_board._hermes_python(crew_proof_board.AGENT)
@@ -89,9 +90,9 @@ def seed():
         conn.execute("delete from task_runs where task_id = ?", (PROBE,))
         conn.execute("delete from task_events where task_id = ?", (PROBE,))
         conn.execute("delete from tasks where id = ?", (PROBE,))
-        conn.execute("insert into tasks (id, title, body, status, assignee, priority, created_at) "
-                     "values (?,?,?,?,?,0,?)",
-                     (PROBE, "PROBE route pin", "Goal: probe\n", "done", "crew-worker",
+        conn.execute("insert into tasks (id, title, body, status, assignee, priority, created_by, created_at) "
+                     "values (?,?,?,?,?,0,?,?)",
+                     (PROBE, "PROBE route pin", "Goal: probe\n", "done", crew_card.FIXTURE_ASSIGNEE, crew_card.PROBE_OWNER,
                       int(time.time())))
         conn.execute("insert into task_runs (task_id, profile, status, started_at, ended_at, "
                      "outcome) values (?,?,?,?,?,?)",

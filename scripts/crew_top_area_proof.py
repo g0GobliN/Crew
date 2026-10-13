@@ -83,11 +83,12 @@ def seed_probe():
     try:
         conn.execute(
             "insert into tasks (id, title, body, assignee, status, priority, created_by, created_at, "
-            "workspace_kind, block_kind) values (?, ?, ?, 'crew-worker', 'blocked', 0, 'probe', ?, "
+            "workspace_kind, block_kind) values (?, ?, ?, ?, 'blocked', 0, ?, ?, "
             "'scratch', 'needs_input')",
             (card, "PROBE toparea %d" % now,
              "Coordinator: %s/\nGoal: probe card for the top area columns\nRole: worker\n"
-             "proof command: true\n" % (os.environ.get("CREW_ROLE") or crew_card.owner_profile()), now))
+             "proof command: true\n" % (os.environ.get("CREW_ROLE") or crew_card.owner_profile()),
+             crew_card.FIXTURE_ASSIGNEE, crew_card.PROBE_OWNER, now))
         for i in range(STOPS):
             conn.execute(
                 "insert into task_runs (task_id, profile, status, started_at, ended_at, outcome, "
