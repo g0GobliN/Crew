@@ -15,6 +15,7 @@ Nothing touches the live board or a live chat unless --send is given. Exit 0 = e
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -65,8 +66,15 @@ def dry(db, state):
 
 
 def main():
-    send_to = sys.argv[sys.argv.index("--send") + 1] if "--send" in sys.argv else ""
     tmp = tempfile.mkdtemp(prefix="crew-notify-proof-")
+    try:
+        return prove(tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def prove(tmp):
+    send_to = sys.argv[sys.argv.index("--send") + 1] if "--send" in sys.argv else ""
     db, state = os.path.join(tmp, "kanban.db"), os.path.join(tmp, "notify-state.json")
     conn = sqlite3.connect(db)
     conn.executescript(SCHEMA)

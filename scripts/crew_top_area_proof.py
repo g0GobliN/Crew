@@ -53,7 +53,7 @@ import crew_card  # noqa: E402 - the owner profile and the base home
 URL = crew_proof_board.graph_base()
 KANBAN_DB = crew_proof_board.proof_db()
 PORT = 9342
-CHROME = (shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser"))
+CHROME = crew_proof_board.find_chrome()
 FAILURES = []
 STOPS = 8
 REASON = (

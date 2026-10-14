@@ -43,8 +43,7 @@ import crew_proof_board  # noqa: E402
 KANBAN_DB = crew_proof_board.proof_db()
 BASE = crew_proof_board.graph_base()
 PORT = int(os.environ.get("CREW_PROOF_CDP_PORT", "9414"))
-CHROME = (shutil.which("google-chrome") or shutil.which("chromium")
-          or shutil.which("chromium-browser"))
+CHROME = crew_proof_board.find_chrome()
 PROFILE_DIR = os.path.join(tempfile.gettempdir(), "crew-term-window-chrome")
 PROBE = "t" + "9a" + "w1nd0w"
 FAILS = []
@@ -89,7 +88,7 @@ SESS_ID = "probe" + "_termwindow_session"
 
 def session_db():
     for prof in ("crew-worker", "crew-verifier", "crew-coordinator"):
-        path = os.path.join(os.path.expanduser("~"), ".hermes", "profiles", prof, "state.db")
+        path = os.path.join(crew_card.base_home(), "profiles", prof, "state.db")
         if os.path.exists(path):
             return prof, path
     return None, None
@@ -298,7 +297,7 @@ def main():
             return 1
         from crew_ws import WSClient
         ws = WSClient(target["webSocketDebuggerUrl"])
-        time.sleep(3.0)
+        ws.wait_for("typeof MAX_STEP_LINES === 'number' && typeof tickChips === 'function'")
         out = ws.evaluate(LOOK) or {}
         check("the page exposes the window and its helpers", out.get("cap") == 6
               and out.get("hasDrop") and out.get("hasTick"), "cap=%s" % out.get("cap"))

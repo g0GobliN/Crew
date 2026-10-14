@@ -33,7 +33,7 @@ import crew_card  # noqa: E402 - the owner profile, the base home and the packag
 PKG = crew_card.package_dir() or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROFILE = os.environ.get("CREW_PROFILE") or crew_card.owner_home()
 PROFILES_ROOT = os.environ.get("CREW_PROFILES_ROOT") or os.path.join(crew_card.base_home(), "profiles")
-HERMES_SRC = os.environ.get("HERMES_SRC") or os.path.expanduser("~/.hermes/hermes-agent")
+HERMES_SRC = os.environ.get("HERMES_SRC") or crew_card.hermes_root()
 HERMES_PY = os.environ.get("HERMES_PY") or crew_card.hermes_python(HERMES_SRC) or sys.executable
 SKILL = "crew-diagnose"
 COMMAND = "/crew-diagnose"

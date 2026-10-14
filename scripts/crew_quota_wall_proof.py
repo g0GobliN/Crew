@@ -173,9 +173,13 @@ def main():
     seed(HOOK_CARD)
     out = hook_call(HOOK_CARD)
     row2, ev2 = state(HOOK_CARD)
-    check("the worker hook re-pins the card on a 429",
-          bool((out or {}).get("context")) and row2[1] != "anthropic",
-          "pin=%s/%s ctx=%s" % (row2[1], row2[0], bool((out or {}).get("context"))))
+    if crew_card.router_path() or crew_card.router_plugin_path():
+        check("the worker hook re-pins the card on a 429",
+              bool((out or {}).get("context")) and row2[1] != "anthropic",
+              "pin=%s/%s ctx=%s" % (row2[1], row2[0], bool((out or {}).get("context"))))
+    else:       # no router, so no live alternative: the wall is counted and nothing is invented
+        check("with no router on the box the worker hook invents no new pin on a 429", row2[1] in (None, "", "anthropic"),
+              "pin=%s/%s" % (row2[1], row2[0]))
     before = len(ev2)
     hook_call(HOOK_CARD, status_code=500, error="internal server error")
     _row3, ev3 = state(HOOK_CARD)

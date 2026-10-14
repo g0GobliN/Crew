@@ -82,6 +82,23 @@ class HermesBin(unittest.TestCase):
                     else os.path.expanduser("~/.local/bin/hermes"))
             self.assertEqual(self.mod.hermes_bin(), want)
 
+    def test_a_cmd_launcher_gives_way_to_a_real_exe_on_windows(self):
+        # Hermes Desktop's bin\hermes.cmd cut a multi-line card body to its first line (2026-10-14, Windows 11)
+        card = load("crew_card_cmd", os.path.join("scripts", "crew_card.py"))
+        os.environ.pop("HERMES_BIN", None)
+        with mock.patch.object(card, "IS_WINDOWS", True), \
+                mock.patch.object(card.shutil, "which", return_value=r"C:\h\bin\hermes.cmd"), \
+                mock.patch.object(card, "hermes_exe", return_value=r"C:\h\venv\Scripts\hermes.exe"):
+            self.assertEqual(card.hermes_bin(), r"C:\h\venv\Scripts\hermes.exe")
+        with mock.patch.object(card, "IS_WINDOWS", True), \
+                mock.patch.object(card.shutil, "which", return_value=r"C:\h\bin\hermes.cmd"), \
+                mock.patch.object(card, "hermes_exe", return_value=""):
+            self.assertEqual(card.hermes_bin(), r"C:\h\bin\hermes.cmd")      # no exe anywhere: the .cmd still beats nothing
+        os.environ["HERMES_BIN"] = r"C:\mine\hermes.cmd"
+        with mock.patch.object(card, "IS_WINDOWS", True), \
+                mock.patch.object(card, "hermes_exe", return_value=r"C:\h\venv\Scripts\hermes.exe"):
+            self.assertEqual(card.hermes_bin(), r"C:\mine\hermes.cmd")        # an explicit HERMES_BIN is obeyed
+
     def test_matches_crew_card(self):
         card = load("crew_card_bin", os.path.join("scripts", "crew_card.py"))
         os.environ["HERMES_BIN"] = "/opt/hermes/bin/hermes"

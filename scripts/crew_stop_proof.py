@@ -119,7 +119,7 @@ def alive(pid):
 
 
 def hermes_bin():
-    return os.environ.get("HERMES_BIN") or shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    return crew_card.hermes_bin()
 
 
 def promotion_pass():
@@ -197,7 +197,7 @@ def main():
     home = os.path.join(tmp, "hermes")
     prof = os.path.join(home, "profiles", "crew-worker")
     os.makedirs(prof, exist_ok=True)
-    sys.path.insert(0, os.path.expanduser("~/.hermes/hermes-agent"))
+    sys.path.insert(0, crew_proof_board.AGENT)
     from hermes_state import SessionDB                  # the store crew_stop closes through, so a real one
     sdb = SessionDB(db_path=Path(os.path.join(prof, "state.db")))
     sdb.create_session(SESSION, "cli")

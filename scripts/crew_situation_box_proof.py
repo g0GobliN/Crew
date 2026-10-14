@@ -46,7 +46,7 @@ import crew_card  # noqa: E402 - the owner profile and the base home
 URL = crew_proof_board.graph_base()
 KANBAN_DB = crew_proof_board.proof_db()
 PORT = 9336
-CHROME = (shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser"))
+CHROME = crew_proof_board.find_chrome()
 FAILURES = []
 MIN_SHARE = 0.95          # of the JSON reason length that must be visible in the box
 
