@@ -35,6 +35,16 @@ export function routeFor(method, path) {
   return null
 }
 
+// A chat session the card page may ask to open: a profile name and a session id.
+const PROFILE_RE = /^[A-Za-z0-9_.-]{1,64}$/
+const SESSION_RE = /^[A-Za-z0-9_-]{1,128}$/
+
+export function openSessionTarget(v) {
+  if (!v || typeof v !== 'object' || typeof v.profile !== 'string' || typeof v.session !== 'string') return null
+  if (v.session === 'no-session' || !PROFILE_RE.test(v.profile) || !SESSION_RE.test(v.session)) return null
+  return { profile: v.profile, session: v.session }
+}
+
 export function navTarget(path) {
   const m = typeof path === 'string' ? NAV_RE.exec(path) : null
   return m ? { page: m[1] ? 'board' : 'card', id: m[2] || null, all: !!m[3] } : null
@@ -66,6 +76,14 @@ export async function handleFrameMessage(ctx, frameWindow, event, setView) {
   if (m.navigate !== undefined) {
     const view = navTarget(m.navigate)
     if (view) setView(view)
+    return
+  }
+  if (m.openSession !== undefined) {
+    // The Desktop plugin ctx has no session-open call. window.hermesDesktop.openSessionWindow is the preload API
+    // (apps/desktop/electron/preload.ts:55); it opens the session in its own window.
+    const t = openSessionTarget(m.openSession)
+    const open = globalThis.window && window.hermesDesktop && window.hermesDesktop.openSessionWindow
+    if (t && typeof open === 'function') open(t.session, { profile: t.profile })
     return
   }
   const id = m.id

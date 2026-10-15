@@ -104,6 +104,21 @@ await send(frameWin, { crew: 1, navigate: 'card/../x' })
 await send(foreign, { crew: 1, navigate: 'board' })
 eq(views, [{ page: 'card', id: 't_77', all: false }])
 
+// --- open chat: the target parser and the handler (the preload API is the only way to open a session)
+const OT = mod.openSessionTarget
+eq(OT({ profile: 'p1', session: 's_1' }), { profile: 'p1', session: 's_1' })
+for (const v of [{ profile: 'p1', session: 'no-session' }, { profile: 'bad profile', session: 's' }, { profile: 'p', session: 'a/b' },
+  { profile: 'p', session: '' }, { profile: 5, session: 's' }, 'p1/s_1', null, undefined]) eq(OT(v), null, JSON.stringify(v))
+const opened = []
+globalThis.window = { hermesDesktop: { openSessionWindow: (id, o) => opened.push([id, o]) } }
+await send(frameWin, { crew: 1, openSession: { profile: 'p1', session: 's_1' } })
+eq(opened, [['s_1', { profile: 'p1' }]])
+await send(foreign, { crew: 1, openSession: { profile: 'p1', session: 's_2' } })
+await send(frameWin, { crew: 1, openSession: { profile: 'p1', session: 'no-session' } })
+await send(frameWin, { crew: 1, openSession: { profile: 'p1', session: '../x' } })
+eq(opened.length, 1, 'foreign source or bad session opens nothing')
+delete globalThis.window
+
 ctx.answer = () => { throw new Error('boom') }
 await send(frameWin, { crew: 1, id: 8, method: 'GET', path: 'board.json' })
 eq(posted.pop(), [{ crew: 1, id: 8, error: 'boom' }, '*'])
