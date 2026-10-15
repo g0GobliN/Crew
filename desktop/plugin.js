@@ -7,7 +7,7 @@
 // postMessage({crew: 1, id, method, path, body}); handleFrameMessage checks who sent it and what it asks for,
 // calls ctx.rest, and answers the same way.
 
-import { ROUTES_AREA, SIDEBAR_NAV_AREA, Button, SandboxedFrame } from '@hermes/plugin-sdk'
+import { ROUTES_AREA, SIDEBAR_NAV_AREA, SandboxedFrame } from '@hermes/plugin-sdk'
 import { jsx, jsxs } from 'react/jsx-runtime'
 import { useEffect, useRef, useState } from 'react'
 
@@ -121,12 +121,8 @@ function CrewPage({ ctx }) {
 
   return jsxs('div', {
     className: 'flex h-full min-h-0 w-full flex-col',
+    // No bar above the page: the card page carries its own link back to the board.
     children: [
-      view.page === 'card'
-        ? jsx('div', { className: 'flex shrink-0 items-center px-3 py-1.5', children: jsx(Button, {
-            size: 'sm', variant: 'ghost', onClick: () => setView({ page: 'board', id: null, all: false }),
-            children: 'Back to board' }) })
-        : null,
       error
         ? jsx('div', { className: 'p-4 text-sm text-(--ui-text-tertiary)', children: 'Crew could not load: ' + error })
         : src
