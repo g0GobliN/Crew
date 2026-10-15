@@ -993,8 +993,8 @@ function renderSitFields(){
   var open = null, t = coordinatorTarget(state.coordinator);
   if(t && typeof window.__crewOpenChat === "function"){
     open = document.createElement("button");
-    open.type = "button"; open.className = "copy"; open.id = "cardCoOpen";
-    open.textContent = "open chat";
+    open.type = "button"; open.className = "openchat"; open.id = "cardCoOpen";
+    open.textContent = "open chat \u2197";
     open.title = "open the chat this card came from"; open.setAttribute("aria-label", open.title);
     open.addEventListener("click", function(e){
       e.stopPropagation();
