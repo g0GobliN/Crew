@@ -218,8 +218,10 @@ def main():
     cfg = read(os.path.join(PROFILE, "config.yaml"))
     disabled = re.search(r"^skills:\s*$(.*?)(?=^\S)", cfg, re.S | re.M)
     body = disabled.group(1) if disabled else ""
+    # No `skills:` section at all disables nothing (a fresh Windows profile has none, issue #15 follow-up): the
+    # check fails only when crew is actually listed under it.
     check("the crew skill is not disabled for the gateway",
-          bool(body) and not re.search(r"^\s*-\s*crew\s*$", body, re.M))
+          not re.search(r"^\s*-\s*crew\s*$", body, re.M))
     try:
         help_text = subprocess.run([sys.executable, CARD_TOOL, "open", "--help"],
                                    capture_output=True, text=True, timeout=60, encoding="utf-8", errors="replace").stdout

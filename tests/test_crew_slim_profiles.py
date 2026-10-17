@@ -17,7 +17,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-os.environ["HERMES_BIN"] = "/bin/false"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), HERMES_BIN="/bin/false")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hermes_fake import FakeConfig  # noqa: E402
 

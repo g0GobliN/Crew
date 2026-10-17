@@ -118,7 +118,12 @@ def duplicate_keys(text):
 
 
 def gateway_identity():
-    """(pid, start_time) of the gateway that is running now; (0, None) when it is not."""
+    """(pid, start_time) of the gateway that is running now; (0, None) when it is not.
+
+    No systemd (native Windows, macOS): (0, None) - the same guard the service check uses below. Unguarded, the
+    `systemctl` call raised FileNotFoundError [WinError 2] on any Windows box with a gateway_state.json (issue #15)."""
+    if not shutil.which("systemctl"):
+        return 0, None
     try:
         pid = int(run(["systemctl", "--user", "show", SERVICE, "-p", "MainPID", "--value"]).strip())
     except ValueError:

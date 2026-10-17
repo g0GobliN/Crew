@@ -21,12 +21,14 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 _TMP = tempfile.mkdtemp(prefix="crew-coordinator-unit-")
 _DB = os.path.join(_TMP, "kanban.db")
-os.environ["HERMES_HOME"] = os.path.join(_TMP, "home")
-os.environ["HERMES_KANBAN_DB"] = _DB
-os.environ["KANBAN_DB"] = _DB
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), HERMES_HOME=os.path.join(_TMP, "home"))
+module_env.pin(globals(), HERMES_KANBAN_DB=_DB)
+module_env.pin(globals(), KANBAN_DB=_DB)
 # A unit test never starts the real `hermes`: under this scratch HERMES_HOME it bootstraps a whole runtime and
 # rewrites the live launcher to point at it (it did, twice). Any stray call fails at once instead.
-os.environ["HERMES_BIN"] = "/bin/false"
+module_env.pin(globals(), HERMES_BIN="/bin/false")
 
 import crew_coordinator as cc  # noqa: E402
 

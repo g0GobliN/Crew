@@ -1612,6 +1612,16 @@ def crew_open_hook(tool_name=None, args=None, result=None, **kwargs):
     return None
 
 
+def _plugin_version():
+    """plugin.yaml's version: the one version every shipped skill carries (tests/test_crew_versions.py)."""
+    try:
+        with open(os.path.join(HERE, "plugin.yaml"), encoding="utf-8") as fh:
+            m = re.search(r"^version:\s*(\S+)", fh.read(), re.M)
+        return m.group(1) if m else ""
+    except OSError:
+        return ""
+
+
 def register(ctx):
     skill_path = os.path.join(HERE, "skills", "crew-verifier", "SKILL.md")
     try:
@@ -1619,7 +1629,7 @@ def register(ctx):
             "crew-verifier",
             skill_path,
             description="Verification pass for a crew card. Runs the proof itself, never trusts the writer.",
-            frontmatter={"version": "0.2.0"},
+            frontmatter={"version": _plugin_version()},
         )
     except Exception:
         pass

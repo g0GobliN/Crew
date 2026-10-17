@@ -5,7 +5,14 @@ import os
 import sys
 from pathlib import Path
 
-ROOT = os.environ.get("HERMES_AGENT_DIR") or os.path.expanduser("~/.hermes/hermes-agent")
+_SCRIPTS = str(Path(__file__).resolve().parents[1] / "scripts")
+if _SCRIPTS not in sys.path:
+    sys.path.insert(0, _SCRIPTS)
+import crew_card  # noqa: E402
+
+# crew_card.hermes_root: HERMES_AGENT_DIR, else this home's or the platform default's hermes-agent - on native
+# Windows that is %LOCALAPPDATA%\hermes\hermes-agent, not ~/.hermes (issue #15: the Windows import failed here).
+ROOT = crew_card.hermes_root()
 if ROOT not in sys.path:
     sys.path.append(ROOT)       # hermes_cli's own root modules (hermes_yaml, utils) live there
 

@@ -103,6 +103,15 @@ The runtime failures on a host with no POSIX shell around the plugin are fixed i
 | a proof or a worker instruction says `python3`, which Windows does not have | the commands crew writes named `python3` | on Windows they name the interpreter that runs crew, quoted, with forward slashes |
 | an agent's `python3 "$HERMES_HOME/plugins/crew/scripts/..."` fails: `python3: command not found` (a CI box with `setup-python` hid it) | the skills told agents to run `python3`; a native Windows Hermes provides only its own venv python | the skills give `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py ...`; the launcher picks `$CREW_PYTHON`, Hermes's venv python, then `python3`, `python`, `py -3` (the e2e job runs those exact commands through Hermes's terminal with no python on PATH) |
 | crew defaults to `~/.hermes` when `HERMES_HOME` is unset | the Windows default home is `%LOCALAPPDATA%\hermes` | `crew_card.default_home()` |
+| `crew_route_pin_proof.py` / `crew_terminal_window_proof.py` die with `UnicodeEncodeError: 'charmap'` under `crew_proofs.py` (#15) | a child's stdout to a pipe is the ANSI code page (cp1252), not the console's | `crew_proofs.child_env` gives every proof `PYTHONIOENCODING=utf-8` unless the caller set one |
+| `crew_role_platforms_proof.py` → `FileNotFoundError: [WinError 2]` (#15) | `gateway_identity()` called `systemctl` with no guard once a `gateway_state.json` existed | it returns "no gateway" when `systemctl` is not on `PATH`, like the service check |
+| `tests/test_crew_board_archived` → `No module named 'hermes_yaml'` (#15) | `tests/kernel_board.py` looked for Hermes's source only at `~/.hermes/hermes-agent` | it uses `crew_card.hermes_root()` (`HERMES_AGENT_DIR`, else `%LOCALAPPDATA%\hermes\hermes-agent`) |
+
+**What "the proofs pass on Windows" means.** The 0.9.10 release note said crew "runs and passes its proofs on
+native Windows 11"; issue #15 measured otherwise. On Windows 11 build 26300 with Hermes Desktop (2026-10-17):
+0.9.11 ran 31 proofs, passed 28; 0.9.12 (`crew_proofs.py --all`, graph running) ran 35, passed 35, none held
+back, and the unit suite passed 756 of 756. Proofs that need systemd or cron report "does not apply here" on
+Windows: a pass there has not checked that part.
 
 ## If you wire it up by hand
 

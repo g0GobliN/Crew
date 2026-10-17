@@ -199,7 +199,7 @@ class VerdictTests(SafetyCase):
 
 
 class ApprovedFlaggedTests(SafetyCase):
-    PY = 'python3 -c "print(1)"'
+    PY = '%s -c "print(1)"' % crew_card.PYTHON   # the interpreter crew names on this OS: Windows may have no python3
 
     def test_proof_check_verb_uses_the_real_detectors(self):
         self.assertTrue(crew_safety.proof_check(self.PY).startswith("flagged: script execution"))
@@ -347,7 +347,7 @@ class ScriptHashTests(SafetyCase):
         self.script = os.path.join(self.home, "site", ".crew", "verify.py").replace(os.sep, "/")   # bash reads \\ as an escape
         os.makedirs(os.path.dirname(self.script))
         self.write("import sys; sys.exit(0)\n")
-        self.cmd = "python3 %s" % self.script
+        self.cmd = "%s %s" % (crew_card.PYTHON, self.script)   # crew_card.PYTHON: no python3 on Windows
         self.card()
         self.snap("t_s", self.cmd)
 

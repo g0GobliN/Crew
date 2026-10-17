@@ -19,7 +19,9 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 _TMPDIR = tempfile.mkdtemp(prefix="crew-heal-test-")
 SAFE_DB = os.path.join(_TMPDIR, "not-the-live-board.db")
-os.environ["KANBAN_DB"] = SAFE_DB
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), KANBAN_DB=SAFE_DB)
 
 sys.path.insert(0, str(REPO / "tests"))
 import crew_card  # noqa: E402

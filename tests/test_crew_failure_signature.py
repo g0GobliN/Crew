@@ -17,7 +17,9 @@ sys.path.insert(0, str(REPO / "scripts"))
 # crew_heal binds KANBAN_DB at import time: point it at a throwaway db *before* importing.
 _TMP = tempfile.mkdtemp(prefix="crew-heal-unit-")
 _DB = os.path.join(_TMP, "kanban.db")
-os.environ["KANBAN_DB"] = _DB
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), KANBAN_DB=_DB)
 os.environ.pop("CREW_PROFILE_PREFIX", None)
 
 import crew_heal  # noqa: E402

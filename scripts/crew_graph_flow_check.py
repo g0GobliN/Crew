@@ -133,8 +133,10 @@ def main():
             check("verifier node carries rc and verdict",
                   ev.get("rc") is not None and bool(ev.get("verdict")),
                   "rc=%s verdict=%s" % (ev.get("rc"), ev.get("verdict")))
-            check("verifier node carries raw output head", bool(ev.get("output_head")),
-                  repr((ev.get("output_head") or "")[:40]))
+            # the head is carried from the verdict record; a quiet proof (`grep -q`, `test -f`) prints nothing,
+            # so "" is the honest value - only a missing field (None) means the evidence was dropped
+            check("verifier node carries raw output head", isinstance(ev.get("output_head"), str),
+                  repr((ev.get("output_head") or "")[:40]) if ev.get("output_head") else "(proof printed nothing)")
             if ev.get("command"):
                 check("verifier node carries the command it ran", True, str(ev.get("command"))[:80])
                 # the Done-when line is the card's own acceptance text: the node must carry it when
@@ -176,9 +178,12 @@ def main():
           cand[0] if cand else (r.stdout + r.stderr)[:120])
     if cand:
         html = open(cand[0], encoding="utf-8").read()
+        # self-contained = it LOADS nothing from outside: a resource attribute, a CSS url() or @import. A URL
+        # in the card's own text (an agent quoting a link inside the embedded JSON) is content, not a load.
+        ext = re.compile(r"(?:\b(?:src|href)\s*=\s*[\"']|url\(\s*[\"']?|@import\s+[\"'])"
+                         r"https?://(?!127\.0\.0\.1|localhost)", re.I)
         check("no external URLs in the page",
-              not re.search(r"https?://(?!127\.0\.0\.1|localhost)", html),
-              "%d match(es)" % len(re.findall(r"https?://(?!127\.0\.0\.1|localhost)", html)))
+              not ext.search(html), "%d match(es)" % len(ext.findall(html)))
         check("page has a timeline scrubber", bool(re.search(r"id=[\"']scrubber[\"']", html)),
               "scrubber element")
         check("page has a role legend", bool(re.search(r"roster|role-legend", html)), "legend")

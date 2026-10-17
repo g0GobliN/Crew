@@ -147,7 +147,7 @@ class ReviseScriptTests(unittest.TestCase):
         self.script = os.path.join(self.home, "site", ".crew", "verify.py").replace(os.sep, "/")   # bash reads \\ as an escape
         os.makedirs(os.path.dirname(self.script))
         self.write("import sys; sys.exit(0)\n")
-        self.cmd = "python3 %s" % self.script
+        self.cmd = "%s %s" % (crew_card.PYTHON, self.script)   # crew_card.PYTHON: no python3 on Windows
         self.body = ("Role: worker\nCoordinator: c\nVerify: independent\nGOAL: g\nproof command: %s\n" % self.cmd)
         conn = sqlite3.connect(self.db)
         conn.execute("insert into tasks values ('t_r', 't', 'blocked', 'crew-worker', ?)", (self.body,))

@@ -18,7 +18,9 @@ from unittest import mock
 REPO = Path(__file__).resolve().parents[1]
 os.environ.setdefault("HERMES_BIN", "/bin/false")   # a unit test never starts the real `hermes` (scratch HERMES_HOME bootstraps a runtime and rewrites the live launcher)
 _HOME = tempfile.mkdtemp(prefix="crew-plugin-loop-")
-os.environ["HERMES_HOME"] = _HOME
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), HERMES_HOME=_HOME)
 spec = importlib.util.spec_from_file_location("crew_plugin_loop_under_test", str(REPO / "__init__.py"))
 P = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(P)

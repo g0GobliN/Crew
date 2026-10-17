@@ -16,7 +16,9 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 
 _TMPDIR = tempfile.mkdtemp(prefix="crew-probe-skip-test-")
-os.environ["KANBAN_DB"] = os.path.join(_TMPDIR, "not-the-live-board.db")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), KANBAN_DB=os.path.join(_TMPDIR, "not-the-live-board.db"))
 
 import crew_card  # noqa: E402
 import crew_coordinator  # noqa: E402

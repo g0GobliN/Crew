@@ -13,6 +13,7 @@ from unittest import mock
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
+import crew_card  # noqa: E402
 import crew_proc  # noqa: E402
 import crew_safety  # noqa: E402
 
@@ -60,10 +61,16 @@ class WindowsProofTests(unittest.TestCase):
             Path(cmd_dir, "git.exe").write_text("", encoding="utf-8")
             bash = os.path.join(tmp, "Git", "bin", "bash.exe")
             Path(bash).write_text("", encoding="utf-8")
-            with mock.patch.object(crew_safety.shutil, "which", return_value=os.path.join(cmd_dir, "git.exe")):
-                self.assertEqual(bash, crew_safety.git_bash())
-            with mock.patch.object(crew_safety.shutil, "which", return_value=None):
-                self.assertEqual("", crew_safety.git_bash())
+            # Isolated from the host: on a real Windows Hermes box HERMES_GIT_BASH_PATH and the Hermes home's
+            # PortableGit are found first, and the test asserted the host's C:\Program Files\Git instead of its own.
+            empty = os.path.join(tmp, "home")
+            with mock.patch.dict(os.environ, {"HERMES_GIT_BASH_PATH": ""}), \
+                    mock.patch.object(crew_card, "base_home", return_value=empty), \
+                    mock.patch.object(crew_card, "default_home", return_value=empty):
+                with mock.patch.object(crew_safety.shutil, "which", return_value=os.path.join(cmd_dir, "git.exe")):
+                    self.assertEqual(bash, crew_safety.git_bash())
+                with mock.patch.object(crew_safety.shutil, "which", return_value=None):
+                    self.assertEqual("", crew_safety.git_bash())
 
     def test_on_windows_a_proof_runs_as_bash_dash_c_and_without_git_bash_it_does_not_run(self):
         seen = []

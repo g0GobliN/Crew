@@ -55,11 +55,16 @@ LIVE = {
 LIVE_BOARD = {"crew_graph_flow_check.py"}
 # Proofs that only READ real cards off the live board and the live dashboard (they seed nothing), so they
 # run every night and are not pinned: pinned to the proofs board they would find no card to check.
-LIVE_READERS = {"crew_tokens_section_proof.py", "crew_route_trail_proof.py"}
+# crew_tokens_section_proof.py left this set (issue #15): it seeds its own probe cards on the proofs board,
+# because a fresh board had no card in every state and the proof failed with "no card page to check".
+LIVE_READERS = {"crew_route_trail_proof.py"}
 
 # A check that cannot run on its own: it takes an explicit card. It is held back with that reason
 # rather than reported as a failure, and it runs as soon as --card says which card to walk.
 NEEDS_ARGS = {"crew_graph_flow_check.py": "--card <id> [--package <path>]"}
+# Every proof that takes --card gets the runner's --card (issue #15 follow-up: `--all --card X` started
+# crew_panel_click_check.py without it, so it died on argparse instead of checking the panel).
+CARD_ARGS = set(NEEDS_ARGS) | {"crew_panel_click_check.py"}
 
 
 def candidates():
@@ -73,6 +78,29 @@ def candidates():
     return out
 
 
+def newest_crew_card():
+    """--all with no --card: the newest real crew card on the live board that has run, so the card-taking
+    checks run instead of being held back (owner, issue #15 follow-up: under --all nothing is skipped).
+    Probe fixtures are not real work and are passed over. '' when the board has no such card."""
+    import sqlite3
+    import crew_card
+    db = os.path.join(crew_card.base_home(), "kanban.db")
+    if not os.path.exists(db):
+        return ""
+    try:
+        conn = sqlite3.connect("file:%s?mode=ro" % db.replace("\\", "/"), uri=True)
+        try:
+            row = conn.execute(
+                "select t.id from tasks t where t.assignee like 'crew-%' and coalesce(t.created_by,'') != ? "
+                "and exists (select 1 from task_runs r where r.task_id = t.id) "
+                "order by t.created_at desc limit 1", (crew_card.PROBE_OWNER,)).fetchone()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - no readable board: the checks stay held back with their reason
+        return ""
+    return row[0] if row else ""
+
+
 def choose(args):
     picked, skipped = [], []
     for name in candidates():
@@ -80,8 +108,8 @@ def choose(args):
             words = [w.strip().lower() for w in args.only.split(",") if w.strip()]
             if not any(w in name.lower() for w in words):
                 continue
-        if name in NEEDS_ARGS and not getattr(args, "card", ""):
-            skipped.append({"file": name, "why": "takes %s" % NEEDS_ARGS[name]})
+        if name in CARD_ARGS and not getattr(args, "card", ""):
+            skipped.append({"file": name, "why": "takes %s" % NEEDS_ARGS.get(name, "--card <id>")})
             continue
         if name in LIVE and not args.all:
             skipped.append({"file": name, "why": LIVE[name]})
@@ -92,10 +120,17 @@ def choose(args):
 
 def child_env(name):
     """The env one proof runs in: the crew-proofs board pinned, except the live-service proofs (LIVE_BOARD)
-    and the read-only live readers."""
+    and the read-only live readers.
+
+    Every child writes UTF-8: the runner decodes the pipe as UTF-8, and on Windows a child's stdout to a pipe
+    is otherwise the ANSI code page (cp1252), so a proof printing a box-drawing or check-mark character died
+    with UnicodeEncodeError before its first check (issue #15: route_pin, terminal_window). A caller's own
+    PYTHONIOENCODING wins."""
+    env = dict(os.environ)
+    env.setdefault("PYTHONIOENCODING", "utf-8")
     if name in LIVE_BOARD or name in LIVE_READERS:
-        return dict(os.environ)
-    return dict(os.environ, **crew_proof_board.proofs_env())
+        return env
+    return dict(env, **crew_proof_board.proofs_env())
 
 
 def run_one(name, timeout, extra=()):
@@ -186,6 +221,10 @@ def main():
     ap.add_argument("--card", default="",
                     help="card id for the checks that cannot run without one (see --list)")
     a = ap.parse_args()
+    if a.all and not a.card:
+        a.card = newest_crew_card()
+        if a.card and not a.json and not a.quiet:
+            print("--card %s (newest crew card on the live board, for the checks that take one)" % a.card)
 
     picked, skipped = choose(a)
     if a.changed is not None:
@@ -214,7 +253,7 @@ def main():
         return 2
     results = []
     for name in picked:
-        extra = ["--card", a.card] if a.card and name in NEEDS_ARGS else []
+        extra = ["--card", a.card] if a.card and name in CARD_ARGS else []
         r = run_one(name, a.timeout, extra)
         results.append(r)
         if not a.json and not a.quiet:

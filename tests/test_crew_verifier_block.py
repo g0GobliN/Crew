@@ -19,9 +19,11 @@ sys.path.insert(0, str(REPO / "scripts"))
 sys.path.insert(0, str(REPO / "tests"))
 
 _TMP = tempfile.mkdtemp(prefix="crew-verifier-block-")
-os.environ["HERMES_HOME"] = os.path.join(_TMP, "home")
-os.environ["HERMES_BIN"] = "/bin/false"
-os.environ["KANBAN_DB"] = os.path.join(_TMP, "x.db")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import module_env  # noqa: E402  - import-time env pins, undone when the module ends (issue #15)
+module_env.pin(globals(), HERMES_HOME=os.path.join(_TMP, "home"))
+module_env.pin(globals(), HERMES_BIN="/bin/false")
+module_env.pin(globals(), KANBAN_DB=os.path.join(_TMP, "x.db"))
 
 import crew_card  # noqa: E402
 import crew_coordinator as cc  # noqa: E402

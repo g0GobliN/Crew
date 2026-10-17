@@ -17,7 +17,10 @@ and `<card>.json.spent`:
     calls   = sum(calls)           pct  = round(100*used/ceiling, 1)
 
 Exit 0 = every checked card page agrees with its ledgers. Non-zero = it does not, and the failing
-check is printed. Read-only: opens the live pages in headless Chrome over the DevTools protocol.
+check is printed. By default it seeds one throwaway probe card per state on the proofs board, with ledger
+files of known figures, checks those pages on a dashboard of its own, and archives the cards and deletes
+the ledgers afterwards - so it passes on a fresh install too. --live / --cards read real cards instead
+(read-only, the live dashboard on :8799). Pages open in headless Chrome over the DevTools protocol.
 """
 import argparse
 import importlib.util
@@ -81,7 +84,7 @@ def ledger_totals(card_id):
 
 
 def pick_cards(db, wanted):
-    """One card id per requested state, newest first."""
+    """One card id per requested state, newest first (--live: the owner's real cards)."""
     out = {}
     conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True)
     try:
@@ -94,6 +97,65 @@ def pick_cards(db, wanted):
     finally:
         conn.close()
     return out
+
+
+# A throwaway card per state, with a ledger of known figures split over the two files the page sums
+# (<card>.json and <card>.json.spent), so the proof passes or fails on the page alone - not on whether
+# this box happens to have a card in every state (issue #15: a fresh Windows board had none, and the
+# proof failed with "no card page to check").
+SEED_LEDGER = ({"budget": 200000, "used": 31234, "raw_total": 45678, "calls": 7},
+               {"budget": 150000, "used": 1111, "raw_total": 2222, "calls": 3})
+
+
+def seed_cards(db, states):
+    """{state: card} seeded on the proofs board (unclaimable fixture assignee, probe owner) and the ledger
+    files written for each. Returns (board, files) so the caller can drop both."""
+    import random
+    import string
+    board, files = {}, []
+    now = int(time.time())
+    budget_dir = os.path.join(crew_card.base_home(), "crew", "budget")
+    os.makedirs(budget_dir, exist_ok=True)
+    conn = sqlite3.connect(db)
+    try:
+        for state in states:
+            card = "t_" + "".join(random.choice(string.hexdigits[:16]) for _ in range(8))
+            conn.execute(
+                "insert into tasks (id, title, body, assignee, status, priority, created_by, created_at, "
+                "workspace_kind) values (?, ?, ?, ?, ?, 0, ?, ?, 'scratch')",
+                (card, "PROBE token section %s %d" % (state, now),
+                 "Coordinator: %s/\nGoal: probe card for the token section\nRole: worker\n"
+                 "proof command: true\n" % crew_card.owner_profile(),
+                 crew_card.FIXTURE_ASSIGNEE, state, crew_card.PROBE_OWNER, now))
+            conn.execute(
+                "insert into task_runs (task_id, profile, status, started_at, ended_at, outcome, summary, "
+                "last_heartbeat_at) values (?, 'crew-worker', 'blocked', ?, ?, 'blocked', 'probe run', ?)",
+                (card, now - 300, now - 240, now - 240))
+            for suffix, data in zip(("", ".spent"), SEED_LEDGER):
+                path = os.path.join(budget_dir, card + ".json" + suffix)
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(data, fh)
+                files.append(path)
+            board[state] = card
+        conn.commit()
+    finally:
+        conn.close()
+    return board, files
+
+
+def drop_seed(db, board, files):
+    conn = sqlite3.connect(db)
+    try:
+        for card in board.values():
+            conn.execute("update tasks set status = 'archived' where id = ?", (card,))
+        conn.commit()
+    finally:
+        conn.close()
+    for path in files:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def http_json(path):
@@ -203,26 +265,47 @@ def check_card(ws, host, card):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default="127.0.0.1:8799")
-    ap.add_argument("--cards", default=None, help="comma-separated card ids; default one per state")
+    ap.add_argument("--host", default=None,
+                    help="dashboard host:port (default: a server of its own on the proofs board; --live: 127.0.0.1:8799)")
+    ap.add_argument("--cards", default=None, help="comma-separated card ids on the live board (implies --live)")
+    ap.add_argument("--live", action="store_true",
+                    help="check the newest real card per state on the live board instead of seeded probe cards")
     ap.add_argument("--states", default=",".join(STATES))
     args = ap.parse_args()
+    states = [s for s in args.states.split(",") if s]
+    live = args.live or bool(args.cards)
 
     if not CHROME:
         print("PROOF FAIL: no chrome binary to render the page with")
         return 2
+    seeded, files, db = {}, [], ""
+    if live:
+        try:
+            board = pick_cards(crew_module().kanban_db_path(), states)
+        except Exception as exc:  # noqa: BLE001
+            print("PROOF FAIL: cannot read the board (%s)" % exc)
+            return 2
+        host = args.host or "127.0.0.1:8799"
+    else:
+        db = crew_proof_board.proof_db()
+        seeded, files = seed_cards(db, states)
+        board = seeded
+        host = args.host or crew_proof_board.graph_base().split("://", 1)[-1]
     try:
-        board = pick_cards(crew_module().kanban_db_path(), args.states.split(","))
-    except Exception as exc:  # noqa: BLE001
-        print("PROOF FAIL: cannot read the board (%s)" % exc)
-        return 2
+        return check_pages(args, board, host, states)
+    finally:
+        if seeded:
+            drop_seed(db, seeded, files)
+
+
+def check_pages(args, board, host, states):
     cards = ([c.strip() for c in args.cards.split(",") if c.strip()] if args.cards
-             else [board[s] for s in args.states.split(",") if s in board])
+             else [board[s] for s in states if s in board])
     if not cards:
         print("PROOF FAIL: no card page to check")
         return 2
 
-    url = "http://%s/card/%s" % (args.host, cards[0])
+    url = "http://%s/card/%s" % (host, cards[0])
     profile = tempfile.mkdtemp(prefix="crew-tokens-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox",
@@ -244,7 +327,7 @@ def main():
             for card in cards:
                 state = [s for s, c in board.items() if c == card]
                 covered += 1
-                for name, ok in check_card(ws, args.host, card):
+                for name, ok in check_card(ws, host, card):
                     print("%-42s %s  %s" % (name, "PASS" if ok else "FAIL",
                                             "%s %s" % (card, state[0] if state else "")))
                     if not ok:

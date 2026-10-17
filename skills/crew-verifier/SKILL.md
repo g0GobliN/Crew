@@ -1,7 +1,7 @@
 ---
 name: crew-verifier
 description: "Verification pass for a crew card with `Verify: independent`. Runs the proof itself, never trusts the writer."
-version: 0.2.0
+version: 0.9.12
 ---
 
 # Crew verifier pass
