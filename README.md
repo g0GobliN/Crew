@@ -5,7 +5,7 @@
 **You ask once. A coordinator owns the card until its proof passes.**
 
 [![Hermes plugin](https://img.shields.io/badge/Hermes-plugin-3fb950?style=flat-square)](https://github.com/NousResearch/hermes-agent)
-[![Version](https://img.shields.io/badge/version-0.9.12-3fb950?style=flat-square)](plugin.yaml)
+[![Version](https://img.shields.io/badge/version-0.9.13-3fb950?style=flat-square)](plugin.yaml)
 [![tests](https://github.com/macd2/Crew/actions/workflows/tests.yml/badge.svg)](https://github.com/macd2/Crew/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -165,11 +165,19 @@ then hermes -p NAME plugins doctor crew and fix anything it reports. Finish by s
 and tell me what it answered.
 ```
 
+## The roles' tools
+
+The roles do not shell out to `crew_card.py`. The plugin registers six tools in the `crew` toolset and the role
+skills name them: `crew_verdict` (run the card's confirmed proof), `crew_progress` (mark a unit pass or fail),
+`crew_proof_check` (screen a proof command and read the safety mode), `crew_lesson` (record a lesson), `crew_plan`
+(open a parent with children) and `crew_diagnose` (the read-only list of stuck cards). `watch` and the owner's CLI
+stay as they are. The idea of native tools instead of shell lines came from @phuongvm (PR #16).
+
 ## Self-improvement
 
 What agents learn on a card lives in `<base home>/crew/lessons.md`, one dated line per lesson with the roles it
 applies to. It is never shipped and the installer and `crew_parity_check` leave it alone. Agents record a lesson
-with `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py lesson --role content,verifier --text "..."`
+with the `crew_lesson` tool (`role`, `text`; for example role `content,verifier`)
 (identical lessons are stored once; the newest 50 entries / 8 KB are kept); editing a crew skill with
 `skill_manage` is refused in every profile, because an installed skill is overwritten by the next install.
 The plugin adds a role's lessons (and the `all` ones) to that role's turn, and the `all` ones to `/crew`'s intake.

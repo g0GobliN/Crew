@@ -1,7 +1,7 @@
 ---
 name: crew
 description: "Crew intake: /crew <ask> - the coordinator checks the ask critically, asks what is missing, then opens one contract card and hands it over."
-version: 0.9.12
+version: 0.9.13
 ---
 
 # /crew - coordinator intake
@@ -147,8 +147,7 @@ Units: <unit one>|<unit two>
 ### The safety choice - once per /crew, asked with the proof command
 
 Proofs run unattended, so the owner confirms the exact command and picks how careful crew is. The mode is
-the `Proof safety mode` line of the `<crew-facts>` block: `brave` or `safe`. Only when that block is missing,
-run `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py safety` (it prints the same word).
+the `Proof safety mode` line of the `<crew-facts>` block: `brave` or `safe`.
 
 - `brave`: the owner set it for good (`/crew-safety brave`). Do NOT ask. Write `Proof mode: brave`.
 - `safe`: ask it as ONE `clarify` question in the same batch as the other questions, the two options as
@@ -168,8 +167,9 @@ choices:
 
 ### Flagged proofs - checked here, so the card never stops mid-run to ask
 
-Before the safety question, run `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py proof-check --command '<the proof command>'`
-(read-only; it does not run the command). It prints one line:
+Before the safety question, call `crew_proof_check(command="<the proof command>")`
+(read-only; it does not run the command). Its `check` field is one of three words, with the `reason` beside it
+and the `safety_mode` (`brave` or `safe`) too:
 
 - `ok`: nothing more to ask.
 - `hardline: <reason>`: this command can never run in any mode. Say so in one line and ask the owner for a
@@ -203,7 +203,7 @@ its output comes back into this session as a new turn: relay it to the owner in 
 No other waiting, no follow-up card, no extra writer, no retry. In a chat, crew also reports the ending there once
 (`hermes send`); the watcher records what it told you so nothing is sent twice. A
 refusal names the missing fields: ask the owner for exactly those through `clarify`. Independent parts
-with different artifacts go through `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py plan --spec <plan.json>`
+with different artifacts go through `crew_plan(spec={...the plan object...})`
 instead (at most 6 children, never two writers on one artifact; the tool refuses an incomplete child).
 
 ## Never
@@ -224,4 +224,4 @@ instead (at most 6 children, never two writers on one artifact; the tool refuses
   about 2000 characters of pasted text under `Inputs`.
 - Ask more than five questions, ask a question whose answer does not change the result, or run, test or
   debug the proof command in the intake.
-- Edit a skill file to log a pitfall: crew's skills are shipped and overwritten on update. Record it with `sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py lesson --role <role> --text "..."`.
+- Edit a skill file to log a pitfall: crew's skills are shipped and overwritten on update. Record it with `crew_lesson(role=<role>, text="...")`.

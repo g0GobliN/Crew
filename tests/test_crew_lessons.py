@@ -99,8 +99,7 @@ class GuardTests(LessonsCase):
                              {"name": name, "operations": [{"action": "patch", "old_string": "a", "new_string": "b"}]}):
                     v = plug.crew_tool_guard(tool_name="skill_manage", args=args, session_id="S", turn_id="T")
                     self.assertEqual((v or {}).get("action"), "block", (role, name, args))
-                    self.assertIn("crew_card.py", v["message"])
-                    self.assertIn("lesson --role", v["message"])
+                    self.assertIn("crew_lesson", v["message"])
 
     def test_allows_other_skills(self):
         plug = self.plugin()

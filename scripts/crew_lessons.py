@@ -7,7 +7,7 @@ crew_parity_check (which compares shipped files only). One lesson per line:
     - 2026-10-03 [content,verifier] A structural proof passing says nothing about whether citations are real ...
 
 The plugin injects the lessons that apply to a role into that role's turn (and the `all` ones into /crew's intake).
-Agents record one with `crew_card.py lesson --role <roles> --text "..."`; they never edit a skill (an installed
+Agents record one with the crew_lesson tool (role, text); they never edit a skill (an installed
 skill is overwritten on the next install). A maintainer promotes a lesson into skills/ in a release.
 
 Run:  python3 crew_lessons.py add --role content,verifier --text "..."   |   show --role content
@@ -22,7 +22,7 @@ ROLES = ("worker", "content", "verifier", "coordinator", "all")
 MAX_ENTRIES = 50
 MAX_BYTES = 8192
 MAX_TEXT = 400
-HEADER = ("# crew lessons\n\nRecorded with `crew_card.py lesson`; injected into the matching role's turn. "
+HEADER = ("# crew lessons\n\nRecorded with the crew_lesson tool; injected into the matching role's turn. "
           "Newest last; oldest are dropped past %d entries / %d KB.\n\n" % (MAX_ENTRIES, MAX_BYTES // 1024))
 ENTRY_RX = re.compile(r"^- (\d{4}-\d{2}-\d{2}) \[([a-z,]+)\] (.+)$")
 
@@ -123,7 +123,7 @@ def block(role):
     if not texts:
         return ""
     return "<crew-lessons>\nLearned on earlier cards; apply them. Record a new one with " \
-           "`crew_card.py lesson`, never by editing a skill.\n%s\n</crew-lessons>" % "\n".join("- " + t for t in texts)
+           "the crew_lesson tool, never by editing a skill.\n%s\n</crew-lessons>" % "\n".join("- " + t for t in texts)
 
 
 def intake_block():

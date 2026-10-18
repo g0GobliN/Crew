@@ -62,7 +62,7 @@ class ReviewGuardTests(unittest.TestCase):
         self.card("Verify: proof\n")
         res = self.plug._review_guard("kanban_request_review", {"summary": "done"})
         self.assertEqual("block", res["action"])
-        self.assertIn("verdict --card t_w", res["message"])
+        self.assertIn("crew_verdict(card=\"t_w\")", res["message"])
         self.assertIn("kanban_complete", res["message"])
 
     def test_an_independent_card_repins_for_the_verifier_and_goes_on(self):

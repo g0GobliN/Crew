@@ -75,6 +75,7 @@ class TickTests(unittest.TestCase):
     def test_the_tick_hook_is_registered_and_the_block_route_hook_is_gone(self):
         hooks = []
         ctx = types.SimpleNamespace(register_command=lambda *a, **k: None, register_skill=lambda *a, **k: None,
+                                    register_tool=lambda *a, **k: None,
                                     register_hook=lambda name, fn: hooks.append((name, fn.__name__)))
         P.register(ctx)
         self.assertIn(("on_kanban_dispatch_tick", "crew_tick"), hooks)

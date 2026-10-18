@@ -40,6 +40,7 @@ under `crew.source_dir`, which the scripts use to find the package when an insta
 
 import importlib.util
 import json
+import logging
 import os
 import re
 import shutil
@@ -573,13 +574,14 @@ ALWAYS_ALLOWED_OVER_BUDGET = {"kanban_block", "kanban_comment", "kanban_show", "
 # Allowed over budget only when the card passes the close rule (a PASS line for its proof command).
 CLOSE_TOOLS_AFTER_PASS = {"kanban_complete", "kanban_request_review", "kanban_block"}
 VERIFIER_BLOCKED_TOOLS = {"write_file", "patch", "skill_manage", "memory", "kanban_create", "kanban_link",
-                          "cronjob_manage", "delegate_task", "execute_code", "send_message"}
+                          "cronjob_manage", "delegate_task", "execute_code", "send_message", "crew_plan"}
 # The coordinator's decision turn (crew_coordinator.py sets CREW_COORDINATOR_TURN) reads and decides; the loop
 # applies the answer. The same write filter as the verifier, plus the verbs that would move the card itself.
 COORDINATOR_TURN_BLOCKED = VERIFIER_BLOCKED_TOOLS | {"kanban_complete", "kanban_block", "kanban_unblock",
-                                                     "kanban_request_review", "kanban_request_changes"}
+                                                     "kanban_request_review", "kanban_request_changes",
+                                                     "crew_plan", "crew_verdict", "crew_progress", "crew_lesson"}
 # Terminal commands that write, move, delete, commit, publish or send. The proof command itself
-# runs inside crew_card.py verdict (a subprocess), so it is not subject to this filter.
+# runs inside the verdict (a subprocess), so it is not subject to this filter.
 VERIFIER_WRITE_RX = re.compile(
     r"(?<![0-9&])>>?(?!&)|\btee\b|\brm\b|\bmv\b|\bcp\b|\bdd\b|\bchmod\b|\bchown\b|\bln\b|\btouch\b|"
     r"\bmkdir\b|\btruncate\b|\binstall\b|\bsed\s+-i|\bperl\s+-i|\bgit\s+(commit|push|add|reset|checkout|"
@@ -1016,6 +1018,14 @@ def _is_crew_turn(session_id, turn_id):
 def _open_guard(tool_name, args, session_id, turn_id):
     """Refuse a direct `crew_card.py open` outside a /crew turn and its session's intake window
     (PROBE titles pass)."""
+    if tool_name == "crew_plan":
+        if os.environ.get("HERMES_KANBAN_TASK") or _is_crew_turn(session_id, turn_id):
+            return None
+        return {"action": "block",
+                "message": "crew cards open only from the owner's /crew command. This session has no "
+                           "open crew intake, so crew_plan is refused. Answer the owner "
+                           "normally; if they want crew work they type /crew <ask> and the intake "
+                           "runs in that turn."}
     if tool_name != "terminal":
         return None
     cmd = str((args or {}).get("command") or "")
@@ -1066,7 +1076,7 @@ def _create_guard(args, session_id, turn_id):
     Returns a block, a `modify` (the body rebuilt by crew_card.render_body, so Coordinator, Verifier, Origin
     and the budget floor are the plugin's and never the model's guess, plus assignee, skills, runtime and the
     model pin) or None when the call is not a crew card. A coordinator or worker process (HERMES_KANBAN_TASK
-    set) may create children: crew_card.py plan validates those."""
+    set) may create children: the plan tool validates those."""
     if os.environ.get("HERMES_KANBAN_TASK"):
         return None
     tool = _card_tool()
@@ -1212,8 +1222,8 @@ def _review_guard(tool_name, args):
     mode = tool.verify_mode(_card_body(card))
     if mode == "proof":
         return {"action": "block",
-                "message": "card %s is `Verify: proof`: no verifier session runs on it. Run `sh \"$HERMES_HOME/"
-                           "plugins/crew/scripts/crew-run.sh\" crew_card.py verdict --card %s`, then kanban_complete with its raw output "
+                "message": "card %s is `Verify: proof`: no verifier session runs on it. Call crew_verdict(card=\"%s\"), "
+                           "then kanban_complete with its raw output "
                            "(the coordinator audits the proof afterwards)." % (card, card)}
     if mode == "closeout":
         return {"action": "block",
@@ -1256,8 +1266,8 @@ def _skill_edit_guard(tool_name, args):
     if not hit:
         return None
     return {"action": "block",
-            "message": "crew's skills are shipped by the plugin and overwritten on update (%s); record the lesson with: "
-                       "sh \"$HERMES_HOME/plugins/crew/scripts/crew-run.sh\" crew_card.py lesson --role <role> --text \"...\""
+            "message": "crew's skills are shipped by the plugin and overwritten on update (%s); record the lesson with "
+                       "crew_lesson(role=<role>, text=\"...\")"
                        % ", ".join(hit)}
 
 
@@ -1348,7 +1358,7 @@ def crew_tool_guard(tool_name=None, args=None, **kwargs):
                 return {"action": "block",
                         "message": "verifier terminal is read/run only; this command writes, moves, deletes, "
                                    "commits or sends. Run the card's proof with "
-                                   "`sh \"$HERMES_HOME/plugins/crew/scripts/crew-run.sh\" crew_card.py verdict --card %s`." % card}
+                                   "crew_verdict(card=\"%s\")." % card}
     return None
 
 
@@ -1389,7 +1399,7 @@ def _record_brief(session_id, ask):
 
 def _intake_facts():
     """The facts the intake would otherwise dig for (2026-10-03: a /crew turn spent ~8 tool calls grepping
-    crew_card.py for the budget and running `crew_card.py safety`): each writer role's default budget and the
+    crew_card.py for the budget and running the safety command): each writer role's default budget and the
     proof safety mode. Only what is true wherever the work lands - the target folder is the owner's answer."""
     tool = _card_tool()
     if tool is None:
@@ -1400,7 +1410,7 @@ def _intake_facts():
     except Exception:  # noqa: BLE001 - no facts is the old behaviour, never a broken /crew turn
         return ""
     facts = ("<crew-facts>\nBudget defaults (tokens): %s. Write the role's number on the Budget line; the plugin "
-             "raises it to the floor itself.\nProof safety mode: %s. Do not run `crew_card.py safety` or read "
+             "raises it to the floor itself.\nProof safety mode: %s. Do not read "
              "crew's files for these values.\n</crew-facts>" % (budgets, mode))
     lessons = _lessons_block()
     return facts + "\n" + lessons if lessons else facts
@@ -1595,6 +1605,11 @@ def crew_open_hook(tool_name=None, args=None, result=None, **kwargs):
             except Exception:  # noqa: BLE001 - bookkeeping never fails the intake turn
                 pass
         return None
+    if tool_name == "crew_plan":
+        # a dry run opens nothing, and a refused plan opens nothing: the window stays for the next try
+        if not (args or {}).get("dry_run") and '"error"' not in str(result or ""):
+            _close_window(kwargs.get("session_id"))
+        return None
     if tool_name != "terminal":
         return None
     cmd = str((args or {}).get("command") or "")
@@ -1633,6 +1648,14 @@ def register(ctx):
         )
     except Exception:
         pass
+    # The model's crew calls (verdict, progress, proof check, lesson, plan, diagnose) are tools in the
+    # `crew` toolset; a missing script or a failing registration leaves the rest of the plugin running.
+    try:
+        tools = _load_script("crew_tools.py", "crew_tools")
+        if tools is not None:
+            tools.register_tools(ctx)
+    except Exception as exc:  # noqa: BLE001 - never stop register() over the tools
+        logging.getLogger(__name__).warning("crew: native tools not registered: %s", exc)
     # Every option as its own command: the option is in the name, so /help and the platform menus
     # list the crew's options directly instead of hiding them behind one command's sub-arguments.
     for name, action, hint, desc in COMMANDS:

@@ -191,7 +191,8 @@ class SettingsTests(unittest.TestCase):
                     continue
                 seen += 1
                 for name in [x for x in val.strip("[]").split(",") if x]:
-                    self.assertIn(name, known, "%s lists %s, not a kernel toolset" % (role, name))
+                    if name != "crew":      # the plugin's own toolset (scripts/crew_tools.py)
+                        self.assertIn(name, known, "%s lists %s, not a kernel toolset" % (role, name))
         self.assertGreaterEqual(seen, 4, "coordinator, worker, content and verifier each list their toolsets")
 
     def test_the_toolset_list_round_trips_through_hermes_config(self):
@@ -203,7 +204,7 @@ class SettingsTests(unittest.TestCase):
         conf = REPO / "templates" / "profiles" / "worker" / "settings.conf"
         changed = CI._apply_settings("p", str(conf))
         self.assertIn("platform_toolsets.cli", changed)
-        self.assertEqual("[terminal,file,web,kanban]", CI._cfg("p", "platform_toolsets.cli"))
+        self.assertEqual("[terminal,file,web,kanban,crew]", CI._cfg("p", "platform_toolsets.cli"))
         self.assertEqual("[]", CI._cfg("p", "platform_toolsets.slack"))
         self.assertEqual([], CI._apply_settings("p", str(conf)), "applying twice must change nothing")
         self.assertEqual([], CI.settings_problems("p", "worker", str(conf.parent)))
@@ -315,7 +316,7 @@ class ProvisionFlowTests(unittest.TestCase):
             for name in CI.skill_names():
                 self.assertTrue(os.path.isfile(os.path.join(skills, "crew", name, "SKILL.md")), (role, name))
         worker = CI.resolve_profile_home("crew-worker")
-        self.assertEqual("[terminal,file,web,kanban]", CI._cfg("crew-worker", "platform_toolsets.cli"))
+        self.assertEqual("[terminal,file,web,kanban,crew]", CI._cfg("crew-worker", "platform_toolsets.cli"))
         self.assertGreater(tree_bytes(os.path.join(self.src_home, "skills")), 4_000_000, "the source keeps its skills")
         status, detail = CI.step_profiles("chat", "crew-", False)
         self.assertEqual("OK", status, detail)

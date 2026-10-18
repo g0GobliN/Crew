@@ -472,7 +472,7 @@ class SplitPlanTests(CardTestCase):
         self.assertNotIn(crew_card.profile_prefix() + "worker", crew_card.closer_profiles(closeout))
         self.assertIn("kanban_request_review", closeout)
         self.assertIn('reviewer="%s"' % crew_card.role_profile("verifier"), closeout)
-        self.assertNotIn(" verdict --card", closeout)           # the coordinator never runs the verifier's script
+        self.assertNotIn("crew_verdict(", closeout)             # the coordinator never runs the verifier's script
         self.assertEqual("%s %s closeout --cards t_2 && (%s)" % (crew_card.PYTHON, crew_card.SELF, script), crew_card.proof_cmd(closeout))
         self.assertTrue(crew_card.needs_pass(closeout))
 
@@ -480,7 +480,7 @@ class SplitPlanTests(CardTestCase):
         crew_card.run_plan({"title": "t", "goal": "g", "children": [dict(self.CHILD)]}, closeout_proof=self.PROOF)
         closeout = self.made[-1]["body"]
         self.assertEqual("", crew_card.verify_mode(closeout))
-        self.assertIn(" verdict --card $HERMES_KANBAN_TASK", closeout)
+        self.assertIn("crew_verdict(card=$HERMES_KANBAN_TASK)", closeout)
         self.assertNotIn("kanban_request_review", closeout)
 
 
@@ -618,7 +618,7 @@ class VerdictLineTests(CardTestCase):
         self.snap()
         ok, why = self.close()
         self.assertFalse(ok)
-        self.assertIn("verdict --card t_v", why)
+        self.assertIn("crew_verdict(card=t_v)", why)
 
     def test_a_pass_on_the_proof_command_closes(self):
         self.snap()

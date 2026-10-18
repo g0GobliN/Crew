@@ -1,5 +1,5 @@
 name: crew
-version: 0.9.12
+version: 0.9.13
 manifest_version: 2
 api_version: 1
 # Hermes refuses to load the plugin below this release (requires_hermes gate). 0.8.0 is the first crew that runs on
@@ -23,6 +23,13 @@ provides_hooks:
   - post_api_request
   - api_request_error
   - on_kanban_dispatch_tick
+provides_tools:
+  - crew_verdict
+  - crew_progress
+  - crew_proof_check
+  - crew_lesson
+  - crew_plan
+  - crew_diagnose
 # register() registers one skill at runtime: crew-verifier (ctx.register_skill). The other skills
 # (crew, crew-role-worker, crew-role-content, crew-diagnose) ship as skills/<name>/SKILL.md and the
 # installer copies them into <profile>/skills/crew/; plugin.yaml has no field for skills.

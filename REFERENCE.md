@@ -120,7 +120,7 @@ return text (it cannot start an agent turn), so the plugin registers `crew-<opti
 
 `scripts/crew_lessons.py` owns `<base home>/crew/lessons.md` (`- YYYY-MM-DD [roles] text`, roles = worker,
 content, verifier, coordinator or all; max 400 characters a lesson, newest 50 / 8 KB kept, identical roles+text
-stored once). Record: `crew_card.py lesson --role <roles> --text "..."`. Read: the `pre_llm_call` hook
+stored once). Record: the `crew_lesson` tool (`role`, `text`). Read: the `pre_llm_call` hook
 `crew_handoff_hook` adds a `<crew-lessons>` block (the role's and `all`) to each card session's first turn;
 `crew_intake_preload` appends the `all` ones to `<crew-facts>`. The `pre_tool_call` guard refuses `skill_manage`
 on any skill under the plugin's `skills/` in every profile. The lessons file itself is data, never shipped (the script is).
@@ -143,14 +143,14 @@ the live page at `/card/<id>`, its data at `/card/<id>.json` and `/healthz`, reb
 
 Every node carries the role doing the work. The card node is the coordinator; run, session and
 subagent nodes carry the card's writer role, read from the `Role:` line of the card contract
-(the intake's `Role:` row is worker or content). Each run of `crew_card.py verdict`
+(the intake's `Role:` row is worker or content). Each run of the `crew_verdict` tool (or `crew_card.py verdict` from the CLI)
 appends a verdict line (`by`, `run_id`, PASS only on rc 0) to `$HERMES_HOME/crew/verdicts/<card>.jsonl`,
 the only verdict record; the verifier node and its chip read the newest line since the card's newest claim.
 `kanban_complete` on a crew card is refused, in every profile, unless the card's proof command has a PASS
 line there and no check failed after it (`crew_card.close_check`). "The card's proof command" is the one
 snapshotted in the card's `origin` event when it opened (or the one an applied coordinator `rescope` set), so
 a rewritten `proof command:` line can never produce a PASS. The `Verify:` contract line picks who runs it:
-`proof` (default when a proof command is named: the writer runs `crew_card.py verdict` and closes the card, no
+`proof` (default when a proof command is named: the writer calls `crew_verdict` and closes the card, no
 verifier session, `kanban_request_review` is refused) or `independent` (the writer requests review, the card's
 model pin is swapped for the router's `review` pick, the verifier runs the proof plus one extra check and
 closes it). A proof command that runs a script in a `.crew/` folder (`python3 <landing folder>/.crew/<date-time-slug>/verify.py`, one folder per card) is
@@ -215,11 +215,12 @@ roles/briefs/*.md      one short contract brief per role
 skills/crew/           the intake skill behind /crew
 skills/crew-verifier/  verification checklist skill
 skills/crew-role-worker/ + crew-role-content/  what a writer card is forced to load
+scripts/crew_tools.py  the `crew` toolset the roles call: crew_verdict, crew_progress, crew_proof_check, crew_lesson, crew_plan, crew_diagnose
 scripts/crew_card.py   open a card from a contract, plan a parent with child cards, run a verdict
 scripts/crew_coordinator.py    the coordinator loop: one pass per dispatch tick over the board's events (heal, decide, ask the owner)
 scripts/crew_heal.py           the mechanical remedies the loop calls first (a library; no command of its own)
 scripts/crew_notify.py         the owner's return path: done / needs-you / abandoned, once each, via `hermes send` (run by the coordinator pass)
-scripts/crew_lessons.py        the lessons file: record (`crew_card.py lesson`), per-role injection blocks
+scripts/crew_lessons.py        the lessons file: record (the `crew_lesson` tool), per-role injection blocks
 scripts/crew_watch.py          the in-session watcher (`crew_card.py watch --card <id>`): the intake runs it as a background terminal so a CLI session is told the ending; records it in notify-state so crew_notify stays silent
 scripts/crew_graph.py          live flow graph (terminal + --watch + self-contained HTML)
 scripts/crew_graph_serve.py    always-on HTTP surface for the graph (/ , /card/<id>, /card/<id>.json, /healthz)

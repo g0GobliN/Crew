@@ -698,8 +698,8 @@ def render_body(c):
     if units:
         lines += ["", "Units (one entry each in $HERMES_HOME/crew/progress/<card>.json):"]
         lines += ["  - %s" % u for u in units]
-        lines += ["Mark a unit: %s %s progress --card <card id> --unit \"<unit>\" --pass "
-                  "--evidence \"<raw evidence>\" [--by verifier]" % (PYTHON, SELF)]
+        lines += ["Mark a unit: crew_progress(card=<card id>, unit=\"<unit>\", result=\"pass\"|\"fail\", "
+                  "evidence=\"<raw evidence>\")"]
     lines += ["", "Done when: %s" % c["done_when"].strip()]
     if str(c.get("proof_cmd") or "").strip():
         lines += ["", "proof command: %s" % c["proof_cmd"].strip()]
@@ -727,10 +727,10 @@ def render_body(c):
             "the raw output, and the coordinator runs it once more after the card is done. kanban_complete is "
             "refused without a PASS line for the proof command. Two failed verifications hand the card back to the "
             "coordinator, who decides. Budget is a hard stop.",
-            "Finish: %s %s verdict --card <this card id> (runs the proof command, writes "
-            "$HERMES_HOME/crew/verdicts/<card>.jsonl, exit 0 = PASS), then kanban_complete(summary=...) with the "
+            "Finish: crew_verdict(card=<this card id>) (runs the proof command, writes "
+            "$HERMES_HOME/crew/verdicts/<card>.jsonl, verdict PASS), then kanban_complete(summary=...) with the "
             "artifact paths and the raw proof output. No verifier session runs on this card; "
-            "kanban_request_review is refused." % (PYTHON, SELF),
+            "kanban_request_review is refused.",
         ]
     else:
         lines += [
@@ -741,9 +741,9 @@ def render_body(c):
             "refused without a PASS line for the proof command run by the verifier. Budget is a hard stop." % verifier,
             "Finish: run the proof command yourself, then kanban_request_review(summary=..., "
             "reviewer=\"%s\"). Never kanban_complete this card yourself." % verifier,
-            "Verifier, finish with: %s %s verdict --card <this card id> (runs the proof, writes "
-            "$HERMES_HOME/crew/verdicts/<card>.jsonl, exit 0 = PASS). A verdict with no verdict file "
-            "does not count." % (PYTHON, SELF),
+            "Verifier, finish with: crew_verdict(card=<this card id>) (runs the proof, writes "
+            "$HERMES_HOME/crew/verdicts/<card>.jsonl, verdict PASS). A verdict with no verdict file "
+            "does not count.",
         ]
     return "\n".join(lines) + "\n"
 
@@ -1452,9 +1452,9 @@ def run_plan(spec, dry_run=False, closeout_proof=None):
     finish = ("Do not run the proof yourself: its script is written by the verifier, not by you. kanban_request_review("
               "summary=\"every child card is done\", reviewer=\"%s\"). Never kanban_complete this card yourself."
               % role_profile("verifier") if independent else
-              "Run `%s %s verdict --card $HERMES_KANBAN_TASK` (it runs the proof command and records the "
-              "verdict). Exit 0: kanban_complete with its output. Otherwise kanban_block with kind 'transient' "
-              "and the output." % (PYTHON, SELF))
+              "Call crew_verdict(card=$HERMES_KANBAN_TASK) (it runs the proof command and records the "
+              "verdict). Verdict PASS: kanban_complete with its output. Otherwise kanban_block with kind 'transient' "
+              "and the output.")
     cbody = ("Role: coordinator\nCoordinator: %s\n\nGOAL: close out %s\n\n%s"
              "Done when: every child card is done and %s.\n\n"
              "proof command: %s\n\n%s\n"
@@ -1863,8 +1863,8 @@ def close_check(card_id, body, claimed_ts=None, verdicts=None):
     vs = verdict_lines(card_id, claimed_ts, verdicts)
     proof = [v for v in vs if (v.get("command") or "") == cmd]
     if not proof:
-        return False, ("no verdict line for the card's proof command `%s` since the newest claim; run "
-                       "`sh \"$HERMES_HOME/plugins/crew/scripts/crew-run.sh\" crew_card.py verdict --card %s`" % (cmd[:120], card_id))
+        return False, ("no verdict line for the card's proof command `%s` since the newest claim; call "
+                       "crew_verdict(card=%s)" % (cmd[:120], card_id))
     if proof[-1]["verdict"] != "PASS":
         return False, "the newest run of the proof command `%s` is a FAIL (rc=%s)" % (cmd[:120], proof[-1].get("rc"))
     if vs[-1]["verdict"] != "PASS":
@@ -1907,51 +1907,71 @@ def rework_fails(card_id):
 PROOF_BLOCKED = 5       # `verdict` exit code: the safety floor refused the proof, nothing ran, no verdict line
 
 
-def cmd_verdict(args):
-    row = card_row(args.card)
+def run_verdict(card, by=None, timeout=300, no_hand_back=False, for_event=None):
+    """Run the card's owner-confirmed proof and record the verdict line: the one implementation behind the
+    `verdict` CLI subcommand and the crew_verdict tool. Returns a dict: `rc` (the CLI exit code: 0 PASS, 1 FAIL,
+    3 second FAIL, 5 blocked, 2 no such card), `text` (the lines the CLI prints, the result word first) and the
+    structured fields the tool reports (`verdict`, `fails`, `handed_back`, `blocked`, `proof_command`, `output`,
+    `proof_rc`, `file`, `error`). The default timeout is the CLI's, so both entry points give a slow proof the same time."""
+    row = card_row(card)
     if not row:
-        print("no such card: %s" % args.card)
-        return 2
-    cmd = close_proof_command(args.card)
-    given = (args.command or "").strip()
-    if given and given != cmd:
-        print("refused: `verdict` runs only the card's owner-confirmed proof command%s. A different command "
-              "is not run: the verifier runs its extra check with its own terminal tool."
-              % ((" (%s)" % cmd[:80]) if cmd else ""))
-        return 4
+        return {"rc": 2, "text": "error: no such card %s" % card, "error": "no such card %s" % card}
+    cmd = close_proof_command(card)
+    notes = []
     if proof_cmd(row[4]) and proof_cmd(row[4]) != cmd:
-        print("note: the proof command line on the card (%s) is not the one the card opened with; it is "
-              "ignored" % proof_cmd(row[4])[:80])
-    for_event = getattr(args, "for_event", None)
+        notes.append("note: the proof command line on the card (%s) is not the one the card opened with; it is "
+                     "ignored" % proof_cmd(row[4])[:80])
+    res = {"proof_command": cmd, "file": verdict_path(card), "proof_rc": 1}
     if not cmd:
-        print("card %s has no owner-confirmed proof command; FAIL until the owner confirms one" % args.card)
-        rec = record_verdict(args.card, "", 1, "no owner-confirmed proof command on the card", 0, by=args.by,
+        body = ["card %s has no owner-confirmed proof command; FAIL until the owner confirms one" % card]
+        rec = record_verdict(card, "", 1, "no owner-confirmed proof command on the card", 0, by=by,
                              for_event=for_event)
-        rc = 1
+        shown = ""
     else:
         t0 = time.time()
-        res = crew_safety.run_proof(cmd, None, args.timeout, crew_safety.proof_mode(args.card, cmd), card=args.card)
-        if res.blocked:
-            print("proof command: %s" % cmd)
-            print("proof BLOCKED by Hermes safety, not run: %s" % res.blocked)
-            return PROOF_BLOCKED
-        out, rc = res.out, res.rc
-        rec = record_verdict(args.card, cmd, rc, out, time.time() - t0, by=args.by, for_event=for_event)
-        print("proof command: %s" % cmd)
-        print("rc=%d" % rc)
-        print("raw output:")
-        print(out.rstrip()[:OUTPUT_KEEP] or "(no output)")
-    fails = rework_fails(args.card)
-    print("verdict: %s  (fails on this card: %d)  file: %s" % (rec["verdict"], fails, verdict_path(args.card)))
+        run = crew_safety.run_proof(cmd, None, timeout, crew_safety.proof_mode(card, cmd), card=card)
+        if run.blocked:
+            res.update(rc=PROOF_BLOCKED, verdict="BLOCKED", blocked=run.blocked)
+            res["text"] = "\n".join(["verdict: BLOCKED - %s" % run.blocked] + notes + [
+                "proof command: %s" % cmd,
+                "proof BLOCKED by Hermes safety, not run: %s" % run.blocked])
+            return res
+        rec = record_verdict(card, cmd, run.rc, run.out, time.time() - t0, by=by, for_event=for_event)
+        shown = run.out.rstrip()[:OUTPUT_KEEP]
+        res["proof_rc"] = run.rc
+        body = ["proof command: %s" % cmd, "rc=%d" % run.rc, "raw output:", shown or "(no output)"]
+    fails = rework_fails(card)
+    res.update(verdict=rec["verdict"], fails=fails, output=shown)
+    tail = []
     if rec["verdict"] == "PASS":
-        return 0
-    if fails >= 2:
+        head, code = "verdict: PASS", 0
+    elif fails >= 2:
         reason = ("crew: %d failed verifications on this card. %s" % (
             fails, (rec.get("output_head") or "").strip().splitlines()[0][:180] if rec.get("output_head") else ""))
-        print("second FAIL: the rework loop is closed - %s" % (
-            "not handed back (--no-hand-back)" if args.no_hand_back else hand_back(args.card, reason)))
-        return 3
-    return 1
+        how = "not handed back (--no-hand-back)" if no_hand_back else hand_back(card, reason)
+        res["handed_back"] = how
+        head, code = "verdict: FAIL, handed back - %s" % how, 3
+        tail = ["second FAIL: the rework loop is closed - %s" % how]
+    else:
+        head, code = "verdict: FAIL (fails on this card: %d)" % fails, 1
+    res["rc"] = code
+    res["text"] = "\n".join([head] + notes + body + tail + ["fails on this card: %d  file: %s" % (fails, verdict_path(card))])
+    return res
+
+
+def cmd_verdict(args):
+    given = (args.command or "").strip()
+    if given and card_row(args.card):
+        cmd = close_proof_command(args.card)
+        if given != cmd:
+            print("refused: `verdict` runs only the card's owner-confirmed proof command%s. A different command "
+                  "is not run: the verifier runs its extra check with its own terminal tool."
+                  % ((" (%s)" % cmd[:80]) if cmd else ""))
+            return 4
+    res = run_verdict(args.card, by=args.by, timeout=args.timeout, no_hand_back=args.no_hand_back,
+                      for_event=getattr(args, "for_event", None))
+    print(res["text"])
+    return res["rc"]
 
 
 def hand_back(card_id, reason):
@@ -2002,40 +2022,52 @@ def start_progress(card_id, units):
     return progress_path(card_id)
 
 
-def cmd_progress(args):
-    data = load_progress(args.card)
+def record_progress(card, unit=None, result=None, evidence=None, by="writer"):
+    """List a card's units (no `unit`), or mark one: the one implementation behind the `progress` CLI subcommand
+    and the crew_progress tool. `result` is True (pass), False (fail) or None (leave as is). Returns a dict:
+    `text` (the lines the CLI prints) plus `card`, `unit`, `result` (PASS/FAIL/open), `by`, `passed`, `total`
+    and `units`."""
+    data = load_progress(card)
     if not data:
-        data = {"card": args.card, "units": [], "created_at": time.time()}
-    if not args.unit:
+        data = {"card": card, "units": [], "created_at": time.time()}
+
+    def mark(u):
+        return "PASS" if u.get("pass") is True else ("FAIL" if u.get("pass") is False else "open")
+
+    if not unit:
         units = data.get("units") or []
         passed = sum(1 for u in units if u.get("pass") is True)
-        print("card %s - %d of %d units passed" % (args.card, passed, len(units)))
+        lines = ["card %s - %d of %d units passed" % (card, passed, len(units))]
         for u in units:
-            mark = "PASS" if u.get("pass") is True else ("FAIL" if u.get("pass") is False else "open")
-            print("  [%s] %s%s" % (mark, u.get("unit"), (" - " + u.get("evidence", "")) if u.get("evidence") else ""))
-        return 0
+            lines.append("  [%s] %s%s" % (mark(u), u.get("unit"), (" - " + u.get("evidence", "")) if u.get("evidence") else ""))
+        return {"text": "\n".join(lines), "card": card, "unit": None, "result": None, "by": None,
+                "passed": passed, "total": len(units), "units": units}
     hit = None
     for u in data["units"]:
-        if u.get("unit") == args.unit:
+        if u.get("unit") == unit:
             hit = u
             break
     if hit is None:
-        hit = {"unit": args.unit, "pass": None, "evidence": "", "by": ""}
+        hit = {"unit": unit, "pass": None, "evidence": "", "by": ""}
         data["units"].append(hit)
-    if args.pass_ is not None:
-        hit["pass"] = args.pass_
-    if args.evidence is not None:
-        hit["evidence"] = args.evidence
-    hit["by"] = args.by
+    if result is not None:
+        hit["pass"] = result
+    if evidence is not None:
+        hit["evidence"] = evidence
+    hit["by"] = by
     data["updated_at"] = time.time()
-    os.makedirs(os.path.dirname(progress_path(args.card)), exist_ok=True)
-    with open(progress_path(args.card), "w", encoding="utf-8") as fh:
+    os.makedirs(os.path.dirname(progress_path(card)), exist_ok=True)
+    with open(progress_path(card), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=1)
     passed = sum(1 for u in data["units"] if u.get("pass") is True)
-    print("card %s - unit %r: %s by %s (%d of %d units passed)" % (
-        args.card, args.unit,
-        "PASS" if hit.get("pass") is True else ("FAIL" if hit.get("pass") is False else "open"),
-        args.by, passed, len(data["units"])))
+    return {"text": "card %s - unit %r: %s by %s (%d of %d units passed)" % (
+                card, unit, mark(hit), by, passed, len(data["units"])),
+            "card": card, "unit": unit, "result": mark(hit), "by": by, "passed": passed,
+            "total": len(data["units"]), "units": data["units"]}
+
+
+def cmd_progress(args):
+    print(record_progress(args.card, args.unit, args.pass_, args.evidence, args.by)["text"])
     return 0
 
 

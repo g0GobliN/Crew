@@ -256,7 +256,14 @@ def step_dashboard(c):
 
 # ---------------------------------------------------------------------------------- agent commands (no python3)
 
-SKILL_CMD_RX = re.compile(r"""sh "\$HERMES_HOME/plugins/crew/scripts/crew-run\.sh" crew_card\.py (safety|proof-check --command '[^']*')""")
+# The one launcher line a skill still gives an agent: the background watcher (everything else is a crew_* tool).
+WATCH_RX = re.compile(r"""terminal\(background=true, notify_on_complete=true, command='([^']*crew_card\.py watch --card <id>)'\)""")
+# Any other crew_card.py subcommand in a skill would send an agent back to a shell line the tools replaced.
+OLD_CMD_RX = re.compile(r"crew_card\.py\s+(?!watch\b)\S+")
+# Tool name each role skill must call (file -> names)
+SKILL_TOOLS = {"crew-verifier": ("crew_verdict(", "crew_progress("), "crew-role-worker": ("crew_verdict(",),
+               "crew-role-content": ("crew_verdict(",), "crew": ("crew_proof_check(", "crew_plan(", "crew_lesson("),
+               "crew-diagnose": ("crew_diagnose(",)}
 
 # Runs under the Hermes venv python: executes each command in the shell Hermes gives an agent's terminal tool.
 AGENT_TERMINAL = r"""
@@ -272,6 +279,24 @@ with tempfile.TemporaryDirectory() as tmp:
             out.append({"cmd": cmd, "rc": r.get("returncode"), "out": r.get("output", "")})
     finally:
         env.cleanup()
+print("@@RESULT@@" + json.dumps(out))
+"""
+
+# Runs under the Hermes venv python the way a role process does: the tools called in-process, no shell, no launcher.
+# argv[1] = the board step's card id.
+TOOLS_IN_PROCESS = r"""
+import json, os, sys, types
+import crew_tools
+card = sys.argv[1]
+names = []
+crew_tools.register_tools(types.SimpleNamespace(register_tool=lambda **kw: names.append(kw["name"])))
+out = {"registered": sorted(names)}
+out["proof_check"] = json.loads(crew_tools.crew_proof_check({"command": "rm -rf build"}))
+out["verdict"] = json.loads(crew_tools.crew_verdict({"card": card}))
+out["diagnose"] = json.loads(crew_tools.crew_diagnose({"state": "todo"}))
+les = json.loads(crew_tools.crew_lesson({"role": "worker", "text": "e2e lesson"}))
+les["exists"] = bool(les.get("file")) and os.path.isfile(les["file"])
+out["lesson"] = les
 print("@@RESULT@@" + json.dumps(out))
 """
 
@@ -293,15 +318,20 @@ def step_agent_commands(c):
     check(not bad, "no installed skill tells an agent to run python3 (checked %d)" % len(texts))
     launcher = os.path.join(c.scripts, "crew-run.sh")
     check(os.path.isfile(launcher), "launcher installed: %s" % launcher)
-    verbatim = [m.group(0) for m in SKILL_CMD_RX.finditer(texts["crew"])]
-    check(len(verbatim) >= 2, "crew/SKILL.md gives %d launcher commands to run verbatim" % len(verbatim))
-    cmds = ["command -v python3 python py >/dev/null 2>&1 && echo PYTHON3-IS-ON-PATH || echo no-python3-on-path"] + verbatim
-    # the exact string the verifier is told to run, against a real card
+    for skill, names in SKILL_TOOLS.items():
+        miss = [n for n in names if n not in texts.get(skill, "")]
+        check(not miss, "%s/SKILL.md names its tools %s (missing: %s)" % (skill, ", ".join(names), miss or "none"))
+    old = ["%s: %s" % (n, m.group(0)) for n, t in texts.items() for m in OLD_CMD_RX.finditer(t)]
+    check(not old, "no installed skill gives a crew_card.py command except watch (%s)" % (old[:3] or "none found"))
+    watch = WATCH_RX.search(texts["crew"])
+    check(watch is not None, "crew/SKILL.md gives the background watcher command")
     card = c.card_id or open(os.path.join(c.home, "e2e-card-id.txt"), encoding="utf-8").read().strip()
-    m = re.search(r'sh "\$HERMES_HOME/plugins/crew/scripts/crew-run\.sh" crew_card\.py verdict --card <card id>',
-                  texts["crew-verifier"])
-    check(m is not None, "crew-verifier/SKILL.md gives the verdict command")
-    cmds.append(m.group(0).replace("<card id>", card))
+    # --lifetime 1 makes the watcher give up after a second ("still running") instead of waiting for the card to end
+    cmds = ["command -v python3 python py >/dev/null 2>&1 && echo PYTHON3-IS-ON-PATH || echo no-python3-on-path",
+            watch.group(1).replace("<id>", card) + " --lifetime 1"]
+    # the owner's CLI: still there, still answers the same way
+    cli = 'sh "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" crew_card.py '
+    cmds += [cli + "safety", cli + "proof-check --command 'rm -rf build'", cli + "verdict --card " + card]
     env = dict(os.environ, HERMES_HOME=c.profile_home, PATH=path_without_python() if IS_WINDOWS else os.environ["PATH"])
     py = c.card.hermes_python()
     done = subprocess.run([py, "-c", AGENT_TERMINAL], input=json.dumps(cmds), capture_output=True, text=True,
@@ -316,12 +346,33 @@ def step_agent_commands(c):
         say("    info: PATH check inside the agent terminal on this host: %s" % probe)
     for r in res[1:]:
         say("    $ %s\n      rc=%s\n%s" % (r["cmd"][:150], r["rc"], "\n".join("      | " + ln for ln in r["out"].strip().splitlines()[-6:])))
-    check(res[1]["rc"] == 0 and res[1]["out"].strip().splitlines()[-1] in ("safe", "brave"), "`crew_card.py safety` through crew-run.sh: %s" % res[1]["out"].strip()[-20:])
-    check(res[2]["rc"] == 0 and res[2]["out"].strip().splitlines()[-1] == "ok" or "flagged" in res[2]["out"] or "hardline" in res[2]["out"],
-          "`crew_card.py proof-check` through crew-run.sh answered: %s" % res[2]["out"].strip()[-40:])
+    wout = res[1]["out"]
+    check(res[1]["rc"] == 0 and (card in wout or "still running" in wout),
+          "the skill's watcher line through the agent terminal exited 0 and reported: %s" % wout.strip()[-80:])
+    check(res[2]["rc"] == 0 and res[2]["out"].strip().splitlines()[-1] in ("safe", "brave"), "owner CLI `crew_card.py safety` through crew-run.sh: %s" % res[2]["out"].strip()[-20:])
+    check(res[3]["rc"] == 0 and (res[3]["out"].strip().splitlines()[-1] == "ok" or "flagged" in res[3]["out"] or "hardline" in res[3]["out"]),
+          "owner CLI `crew_card.py proof-check` through crew-run.sh answered: %s" % res[3]["out"].strip()[-40:])
     # the board step's card has no owner-confirmed proof, so FAIL is the right verdict: what is proven is that the
     # command ran and crew answered, not that this card passes
-    check("verdict:" in res[-1]["out"], "`crew_card.py verdict --card %s` through crew-run.sh answered: %s" % (card, res[-1]["out"].strip().splitlines()[-1][:60]))
+    check("verdict:" in res[-1]["out"], "owner CLI `crew_card.py verdict --card %s` through crew-run.sh answered: %s" % (card, res[-1]["out"].strip().splitlines()[-1][:60]))
+    # the tools, in-process, as a role process runs them (no shell between the model and crew)
+    tenv = dict(env, PYTHONPATH=c.scripts + os.pathsep + env.get("PYTHONPATH", ""))
+    done = subprocess.run([py, "-c", TOOLS_IN_PROCESS, card], capture_output=True, text=True, timeout=900,
+                          env=tenv, encoding="utf-8", errors="replace")
+    body = done.stdout or ""
+    check("@@RESULT@@" in body, "crew_tools ran in-process under the Hermes python (rc=%s %s)" % (done.returncode, (done.stderr or "")[-300:]))
+    t = json.loads(body.split("@@RESULT@@", 1)[1])
+    want = ["crew_diagnose", "crew_lesson", "crew_plan", "crew_proof_check", "crew_progress", "crew_verdict"]
+    check(t["registered"] == sorted(want), "register_tools registers the six crew tools: %s" % t["registered"])
+    pc = t["proof_check"]
+    check(pc.get("check") in ("ok", "flagged", "hardline") and pc.get("safety_mode") in ("safe", "brave"),
+          "crew_proof_check({'command': 'rm -rf build'}) answered JSON: %s" % pc)
+    v = t["verdict"]
+    check(v.get("verdict") in ("PASS", "FAIL"), "crew_verdict({'card': %s}) answered JSON, FAIL expected without proof: %s" % (card, str(v)[:120]))
+    dg = t["diagnose"]
+    check(isinstance(dg.get("count"), int) and isinstance(dg.get("text"), str), "crew_diagnose({'state': 'todo'}) answered count=%s and text" % dg.get("count"))
+    ls = t["lesson"]
+    check(ls.get("exists"), "crew_lesson wrote the lessons file: %s" % ls.get("file"))
 
 
 # ------------------------------------------------------------------------------------------------ one real card
