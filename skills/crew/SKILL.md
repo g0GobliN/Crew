@@ -1,7 +1,7 @@
 ---
 name: crew
 description: "Crew intake: /crew <ask> - the coordinator checks the ask critically, asks what is missing, then opens one contract card and hands it over."
-version: 0.9.14
+version: 0.9.15
 ---
 
 # /crew - coordinator intake
@@ -200,7 +200,9 @@ I'll notify you here when it's done or if it needs you.
 ```
 
 The Board line is where the owner watches the run (the browser dashboard; in Hermes Desktop the same board is the
-Crew page). Leave the line out only when the preload named no board.
+Crew page). Leave the line out only when the preload named no board. When the preload says the gateway is not running, add the
+one line it gives (the card will not start until the gateway runs, with the command) right after the Board line,
+verbatim; otherwise add nothing.
 
 The watcher only reads the board; it exits when the card is done and audited, needs the owner, or was abandoned, and
 its output comes back into this session as a new turn: relay it to the owner in one or two lines, nothing more.

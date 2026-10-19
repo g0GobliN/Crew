@@ -1450,13 +1450,28 @@ def _board_url():
         return ""
 
 
+def _gateway_down_line():
+    """crew_card.dispatcher_warning(): one plain sentence when the gateway (the kanban dispatcher) is not running,
+    "" when it is, and "" when the card tool cannot be loaded. A card opened while it is down sits in ready."""
+    tool = _card_tool()
+    if tool is None:
+        return ""
+    try:
+        return str(tool.dispatcher_warning() or "").strip()
+    except Exception:  # noqa: BLE001 - a missing warning is the old behaviour, never a broken intake
+        return ""
+
+
 def _banner_open():
     """The preload prefix that makes the intake open its reply with the line, and names the board the card-open
     reply links to (owner, 2026-10-19: the terminal owner needs the dashboard URL once the run starts)."""
     url = _board_url()
     board = ("The crew board is at %s - the card-open reply names it on its Board: line.\n\n" % url) if url else ""
+    down = _gateway_down_line()
+    gateway = ("The Hermes gateway is not running, so the card cannot start. Add this line to the card-open reply, "
+               "right after the Board line, verbatim: %s\n\n" % down) if down else ""
     return ("Open your reply with this line, verbatim, as its first line, then carry on with the intake:\n\n"
-            "%s\n\n%s" % (_crew_banner(), board))
+            "%s\n\n%s%s" % (_crew_banner(), board, gateway))
 
 
 def crew_intake_preload(user_message=None, session_id=None, turn_id=None, **_kw):

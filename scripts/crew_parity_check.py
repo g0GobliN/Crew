@@ -23,11 +23,13 @@ PACKAGE = os.environ.get("CREW_PACKAGE") or crew_card.package_dir() or os.path.d
 PROFILES = os.path.join(crew_card.default_home(), "profiles")
 # Where each shipped file lands inside a profile, read from the installer so the two can never
 # disagree about what "installed" means.
-def shipped_files(package):
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("crew_install", os.path.join(package, "install.py"))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+def shipped_files(package, mod=None):
+    # `mod` is the installer module when the installer itself asks (install.py checks parity after an install).
+    if mod is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("crew_install", os.path.join(package, "install.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
     out = []
     # PLUGIN_FILES carries the scripts too (plugins/crew/scripts/...): nothing crew runs lives in <profile>/scripts.
     for rel in getattr(mod, "PLUGIN_FILES", []):
@@ -58,6 +60,35 @@ def installed_profiles(profiles):
     return out
 
 
+def compare(package, profiles, skip=(), mod=None):
+    """Every shipped file against its copy in each (name, root) profile: {pairs, mismatches, missing, skipped, detail}."""
+    pairs = mismatches = missing = skipped = 0
+    detail = []
+    for rel, target in shipped_files(package, mod):
+        src = os.path.join(package, rel)
+        if not os.path.isfile(src):
+            missing += 1
+            detail.append({"file": rel, "problem": "not in the package"})
+            continue
+        want = md5(src)
+        for name, root in profiles:
+            copy = os.path.join(root, target)
+            if any(rel.endswith(sk) for sk in skip):
+                skipped += 1
+                continue
+            if not os.path.isfile(copy):
+                missing += 1
+                detail.append({"file": rel, "profile": name, "problem": "copy missing"})
+                continue
+            pairs += 1
+            got = md5(copy)
+            if got != want:
+                mismatches += 1
+                detail.append({"file": rel, "profile": name, "problem": "md5 differs",
+                               "package": want, "copy": got})
+    return {"pairs": pairs, "mismatches": mismatches, "missing": missing, "skipped": skipped, "detail": detail}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--package", default=PACKAGE)
@@ -75,30 +106,9 @@ def main():
         print("no profile has the crew plugin installed under %s" % a.profiles)
         return 2
 
-    pairs = mismatches = missing = skipped = 0
-    detail = []
-    for rel, target in shipped_files(a.package):
-        src = os.path.join(a.package, rel)
-        if not os.path.isfile(src):
-            missing += 1
-            detail.append({"file": rel, "problem": "not in the package"})
-            continue
-        want = md5(src)
-        for name, root in profiles:
-            copy = os.path.join(root, target)
-            if any(rel.endswith(sk) for sk in a.skip):
-                skipped += 1
-                continue
-            if not os.path.isfile(copy):
-                missing += 1
-                detail.append({"file": rel, "profile": name, "problem": "copy missing"})
-                continue
-            pairs += 1
-            got = md5(copy)
-            if got != want:
-                mismatches += 1
-                detail.append({"file": rel, "profile": name, "problem": "md5 differs",
-                               "package": want, "copy": got})
+    r = compare(a.package, profiles, a.skip)
+    pairs, mismatches, missing, skipped, detail = (r["pairs"], r["mismatches"], r["missing"], r["skipped"],
+                                                   r["detail"])
     if a.json:
         print(json.dumps({"package": a.package, "profiles": [n for n, _r in profiles],
                           "pairs": pairs, "mismatches": mismatches, "missing": missing,

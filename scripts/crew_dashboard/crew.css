@@ -543,3 +543,6 @@ body.page-card{position:relative}
 .page-card .brand:hover{background:var(--crew-fill-1)}
 .page-card .brand:focus-visible{outline:2px solid var(--crew-tone-ready);outline-offset:2px}
 .page-card #event{padding-left:28px}
+.page-board .dispatcher-down{margin:0 18px 8px;padding:7px 12px;border-radius:6px;font-size:12.5px;flex:0 0 auto;
+  color:var(--crew-tone-blocked);background:color-mix(in srgb, var(--crew-tone-blocked) 12%, transparent)}
+.page-board .dispatcher-down code{font:inherit;font-weight:600}

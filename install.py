@@ -4,18 +4,22 @@
 Usage:
   python3 install.py [--profile NAME] [--check] [--no-service] [--no-cron] [--no-profiles]
                      [--nightly-proofs [--proofs-deliver TARGET]]
-                     [--chat-kanban] [--telegram-menu] [--spill-cap]
+                     [--chat-kanban] [--telegram-menu] [--spill-cap] [--approve-hooks]
 
-The installer never prompts. What it does by default: copies the plugin (scripts included) into the
+The installer prompts once, and only when a shell hook needs the owner's consent (see the shell-hook consent
+section; --approve-hooks answers it for a non-interactive run). What it does by default: copies the plugin (scripts included) into the
 profile, the role profiles, the roles file, the local dashboard unit, the config keys crew reads. Everything
 that reaches beyond crew's own files is a flag: --nightly-proofs (cron),
 --chat-kanban (kanban toolset on zulip/telegram), --telegram-menu (command menu order), --spill-cap
-(hooks.output_spill.max_chars on the installing profile). It never approves a shell hook: consent is
-Hermes's own (the TTY prompt), and the installer only reports what is still missing.
+(hooks.output_spill.max_chars on the installing profile). Shell hooks are approved the way Hermes records an
+approval: crew's own and the owner's inherited ones without a prompt, any other missing or drifted one only
+after one y/N (or --approve-hooks). After the install every profile that carries crew must hold the package's
+version, md5 for md5; a lagging one is repaired, and the install exits 1 ("not ready") only if one still differs after that.
 
 --check changes nothing: it prints exactly what would change and exits 0 when the
 package is complete, 1 when something is missing or a role's first-call prompt is over
-roles.json prompt_budget_tokens (it also prints each role's skills size and measured first call).
+roles.json prompt_budget_tokens or a profile lags the package (it also prints each role's skills size and measured
+first call). It never approves a hook.
 Every step is idempotent and prints
 OK / CHANGED / SKIP plus what it did. Running twice is safe.
 """
@@ -26,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -544,10 +549,17 @@ def step_menu_priority(profile, apply, enabled):
 
 # ------------------------------------------------------------------- shell-hook consent
 # A hook only fires when its (event, command) pair sits in that home's shell-hooks-allowlist.json:
-# without the entry the runtime logs "not allowlisted - skipped" and the gate is simply absent. The
-# approval is the owner's: Hermes asks at its own TTY prompt (or `--accept-hooks`, typed by the owner).
-# The installer never writes that file and never passes --accept-hooks; it reads it and reports what is
-# still missing.
+# without the entry the runtime logs "not allowlisted - skipped" and the gate is simply absent. Installing
+# crew is the consent for what crew ships, so the installer writes the entry itself, in the shape Hermes
+# writes on approval (agent/shell_hooks.py _record_approval: event, command, approved_at, and the script
+# mtime at approval, which `hermes hooks doctor` compares against for drift):
+#   - a hook whose script is a file this package ships (md5 equal to the package copy): approved, no prompt;
+#   - a role profile's hook that the owner profile already holds a current approval for: approved, no prompt;
+#   - any other hook that is missing or drifted (the script changed after its approval): ONE block lists
+#     them all (profile, event, command, script, approved-at vs script mtime) and asks once, y/N on a TTY;
+#     off a TTY only --approve-hooks answers it, otherwise the install prints the block and exits 1.
+#     A drifted entry is replaced (Hermes's --accept-hooks never refreshes one).
+# --check approves nothing: it prints what it would approve and what it would ask.
 
 ALLOWLIST_NAME = "shell-hooks-allowlist.json"
 # the runtime's own rule for finding the script inside a hook command
@@ -736,37 +748,169 @@ def settings_problems(profile, role, tpl):
             for key, want in entries if (have[key] or "").strip() != want]
 
 
-def consent_hint(name):
-    """How the owner approves one profile's hooks with Hermes's own flow."""
-    flag = " ".join(profile_flag(name))
-    cli = "hermes %s" % flag if flag else "hermes"
-    return ("approve with Hermes, not the installer: review `%s hooks list`, then run `%s chat` in a terminal and "
-            "confirm each hook at its prompt (or `%s chat --accept-hooks` once, yourself); an approval-drift hook keeps "
-            "its old entry, which --accept-hooks never refreshes: `%s hooks revoke <command>` it first, then approve "
-            "again; check with `%s hooks doctor`"
-            % (cli, cli, cli, cli, cli))
+try:
+    import fcntl
+except ImportError:      # native Windows: no flock, the write below is still atomic
+    fcntl = None
 
 
-def step_permissions(profile_home, profile, prefix, apply):
-    """Report-only: which declared shell hooks of the installing profile and of each role profile Hermes would skip.
+def _record_approval(home, event, command):
+    """Write one allowlist entry exactly as Hermes does (agent/shell_hooks.py _record_approval): a read-modify-write
+    under the sibling `.lock` flock, any earlier entry for the same (event, command) replaced, sorted keys, indent 2,
+    atomic replace, mode 0600. Mirrored rather than imported: the installer is stdlib only and Hermes's modules need
+    its venv; tests/test_crew_hook_consent.py pins the two writers to the same bytes."""
+    path = os.path.join(home, ALLOWLIST_NAME)
+    os.makedirs(home, exist_ok=True)
+    with open(path + ".lock", "a+", encoding="utf-8") as lock:
+        if fcntl:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            data = None
+        if not isinstance(data, dict):
+            data = {}
+        approvals = data.get("approvals") if isinstance(data.get("approvals"), list) else []
+        entry = {"event": event, "command": command,
+                 "approved_at": datetime.now(tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+                 "script_mtime_at_approval": _mtime_iso(command)}
+        data["approvals"] = [e for e in approvals
+                             if not (isinstance(e, dict) and e.get("event") == event and e.get("command") == command)] + [entry]
+        fd, tmp = tempfile.mkstemp(dir=home, prefix=".shell-hooks-allowlist_", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2, sort_keys=True, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            if POSIX_MODES:
+                os.chmod(tmp, 0o600)
+            os.replace(tmp, path)
+        except BaseException:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
 
-    Never writes. The coordinator's decision turn (`hermes -p <prefix>coordinator chat -Q`) runs without
-    --accept-hooks, so a role profile that inherited the owner's gates (facts-gate, model-gate, ...) only enforces
-    them once its own allowlist holds them; kanban workers are started with --accept-hooks by the dispatcher.
+
+def _hook_state(entry, command):
+    """'missing', 'drift' (the script changed after the approval) or 'current' for one allowlist entry."""
+    if entry is None:
+        return "missing"
+    now, was = _mtime_iso(command), entry.get("script_mtime_at_approval")
+    return "drift" if now and was and now > was else "current"
+
+
+def _crew_ships(command):
+    """True when the hook's script is a file this package ships and the copy on disk is byte-identical to it."""
+    script = os.path.realpath(_script_path(command))
+    for rel in PLUGIN_FILES:
+        src = os.path.realpath(SRC_DIR / rel)
+        if script == src or script.endswith(os.sep + os.path.join("plugins", "crew", *rel.split("/"))):
+            return _same(src, script)
+    return False
+
+
+def _approvals(home):
+    entries, _problem = _load_allowlist(home)
+    return {(e.get("event"), e.get("command")): e for e in entries or [] if isinstance(e, dict)}
+
+
+def hook_consent_plan(homes):
+    """[(name, home, event, command, action, entry)] for every declared hook of [(name, home)], the owner first.
+    action: ok (current approval) | shipped | inherited (the owner holds a current one) | follows (the owner's own
+    hook is waiting for consent, the role's follows it) | ask (needs the owner's consent) | nofile (script missing,
+    left to permission_problems)."""
+    plan, owner_pending = [], set()
+    owner = _approvals(homes[0][1])
+    for i, (name, home) in enumerate(homes):
+        have = _approvals(home)
+        for event, command in _declared_hooks(home):
+            entry = have.get((event, command))
+            if _hook_state(entry, command) == "current":
+                action = "ok"
+            elif not os.path.exists(_script_path(command)):
+                action = "nofile"
+            elif _crew_ships(command):
+                action = "shipped"
+            elif i and _hook_state(owner.get((event, command)), command) == "current":
+                action = "inherited"
+            elif i and (event, command) in owner_pending:
+                action = "follows"
+            else:
+                action = "ask"
+                if not i:
+                    owner_pending.add((event, command))
+            plan.append((name, home, event, command, action, entry))
+    return plan
+
+
+def _consent_block(asks):
+    lines = ["shell hooks that need your consent (not shipped by crew; missing or changed since approved):"]
+    for name, _home, event, command, _action, entry in asks:
+        script = _script_path(command)
+        lines.append("  %s | %s | %s | script %s | approved %s vs script modified %s"
+                     % (name, event, command, script, (entry or {}).get("approved_at") or "never", _mtime_iso(command)))
+    return "\n".join(lines)
+
+
+def _confirm_block():
+    """True/False for the owner's y/N answer on a terminal, None when there is no terminal to ask."""
+    if not sys.stdin.isatty():
+        return None
+    try:
+        return input("Approve these hooks (the entries above are replaced or added)? [y/N]: ").strip().lower() in ("y", "yes")
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return False
+
+
+def step_permissions(profile_home, profile, prefix, apply, approve_hooks=False):
+    """Approve the declared shell hooks of the installing profile and of each role profile (see the consent section
+    above); report whatever still stops one from firing. Writes nothing unless `apply`.
+
+    The coordinator's decision turn (`hermes -p <prefix>coordinator chat -Q`) runs without --accept-hooks, so a role
+    profile that inherited the owner's gates (facts-gate, model-gate, ...) only enforces them once its own allowlist
+    holds them; kanban workers are started with --accept-hooks by the dispatcher.
     """
     homes = [(profile or "default", profile_home)]
     homes += [(name, home) for _role, name, home, _tpl in _role_plans(prefix) if os.path.isdir(home)]
-    findings, hints = [], []
-    for name, home in homes:
-        found = permission_problems(home)
-        if found:
-            findings += ["%s: %s" % (name, f) for f in found]
-            hints.append("%s: %s" % (name, consent_hint(name)))
+    plan = hook_consent_plan(homes)
+    auto = [p for p in plan if p[4] in ("shipped", "inherited")]
+    asks = [p for p in plan if p[4] == "ask"]
+    if not apply:
+        notes = []
+        if auto:
+            notes.append("would approve %d hook(s) without a prompt: %s" % (
+                len(auto), ", ".join("%s %s" % (p[0], os.path.basename(p[3])) for p in auto)))
+        if asks:
+            notes.append(_consent_block(asks).replace("\n", " ; ") + " ; install asks once (--approve-hooks off a terminal)")
+        if notes:
+            return "CHANGED", " | ".join(notes)
+    else:
+        for name, home, event, command, _action, _entry in auto:
+            _record_approval(home, event, command)
+            print("  approved %s [%s] %s (%s)" % (name, event, os.path.basename(command),
+                                                 "shipped by crew" if _crew_ships(command) else "the owner's approval"))
+        if asks:
+            print(_consent_block(asks))
+            ok = True if approve_hooks else _confirm_block()
+            if ok:
+                for name, home, event, command, _action, _entry in asks:
+                    _record_approval(home, event, command)
+                    print("  approved %s [%s] %s" % (name, event, os.path.basename(command)))
+            else:
+                why = "declined" if ok is False else "no terminal to ask on"
+                return "FAILED", "hook consent not given (%s) - re-run on a terminal or with --approve-hooks" % why
+        # a role profile that followed an owner hook that was just approved
+        for name, home, event, command, action, _entry in hook_consent_plan(homes):
+            if action == "inherited":
+                _record_approval(home, event, command)
+                print("  approved %s [%s] %s (the owner's approval)" % (name, event, os.path.basename(command)))
+    findings = ["%s: %s" % (name, f) for name, home in homes for f in permission_problems(home)]
     if not findings:
         pairs = sum(len(_declared_hooks(home)) for _name, home in homes)
         return "OK", "%d home(s), %d declared hook(s), every one approved in Hermes's allowlist" % (len(homes), pairs)
     summary = "; ".join(findings[:3]) + ("" if len(findings) <= 3 else " (+%d more)" % (len(findings) - 3))
-    return "FAILED", "hook consent missing or stale - %s | %s" % (summary, " | ".join(hints))
+    return "FAILED", "hook consent missing or stale - %s" % summary
 
 
 def plugin_script(profile_home, name):
@@ -1390,6 +1534,69 @@ def step_profiles(source_profile, prefix, apply, no_profiles=False):
     return "CHANGED", "role profiles -> " + ", ".join(done)
 
 
+# ---------------------------------------------------------------- every profile on the installed version
+def parity_homes(profile_home, prefix, no_profiles):
+    """[(label, home)] of every profile that carries crew: the installing profile, the role profiles, and the other
+    copies step_other_copies brings up to version (the default home and any profile with plugins/crew)."""
+    base = crew_card.default_home()
+    label = lambda home: os.path.basename(home) if os.path.abspath(home) != os.path.abspath(base) else "default"
+    homes = [profile_home]
+    if not no_profiles:
+        homes += [home for _r, _n, home, _t in _role_plans(prefix) if os.path.isdir(home)]
+    homes += [base] + sorted(str(p) for p in (Path(base) / "profiles").glob("*") if p.is_dir())
+    out, seen = [], set()
+    for home in homes:
+        key = os.path.abspath(home)
+        if key in seen or not os.path.isdir(os.path.join(home, "plugins", "crew")) and home != profile_home:
+            continue
+        seen.add(key)
+        out.append((label(home), home))
+    return out
+
+
+def _lagging(profile_home, prefix, no_profiles):
+    """([(name, home, description)] of profiles off the package's version or files, homes checked)."""
+    import crew_parity_check
+    want = _plugin_version(os.path.join(SRC_DIR, "plugin.yaml"))
+    homes = parity_homes(profile_home, prefix, no_profiles)
+    lagging = []
+    for name, home in homes:
+        if os.path.realpath(os.path.join(home, "plugins", "crew")) == os.path.realpath(SRC_DIR):
+            continue       # `hermes plugins install` mode: this checkout is the plugin dir
+        res = crew_parity_check.compare(str(SRC_DIR), [(name, home)], mod=sys.modules[__name__])
+        have = _plugin_version(os.path.join(home, "plugins", "crew", "plugin.yaml"))
+        if have != want or res["mismatches"] or res["missing"]:
+            files = sorted({d["file"] + (" (missing)" if d["problem"] == "copy missing" else "") for d in res["detail"]})
+            lagging.append((name, home, "%s: version %s, want %s; %d differ/missing%s" % (
+                name, have or "none", want, len(files), " (%s)" % ", ".join(files[:3]) if files else "")))
+    return want, homes, lagging
+
+
+def step_parity(profile_home, prefix, apply, no_profiles=False):
+    """Every profile with crew holds the package's version and md5-identical files (scripts/crew_parity_check.py is
+    the comparison). A lagging profile is brought up to version here (plugin, skills, scripts, roles file: what
+    step_other_copies does), then compared again; only a profile that still differs after the repair is FAILED
+    (not ready). In --check it is a would-change line."""
+    want, homes, lagging = _lagging(profile_home, prefix, no_profiles)
+    if not lagging:
+        return "OK", "%d profile(s) on crew %s, md5 for md5 (%s)" % (len(homes), want, ", ".join(n for n, _h in homes))
+    if not apply:
+        return "CHANGED", "profiles lag crew %s - %s" % (want, " | ".join(d for _n, _h, d in lagging))
+    for name, home, _d in lagging:
+        for f in (step_plugin, step_skills, step_scripts, step_roles):
+            try:
+                status, detail = f(home, True)
+            except OSError as exc:
+                print("  %s: %s failed: %s" % (name, f.__name__, exc))
+                continue
+            if status == "CHANGED":
+                print("  %s: %s" % (name, detail))
+    _w, _h, still = _lagging(profile_home, prefix, no_profiles)
+    if still:
+        return "FAILED", "not ready, profiles still lag crew %s after the repair - %s" % (want, " | ".join(d for _n, _h, d in still))
+    return "CHANGED", "brought to crew %s: %s; all %d profile(s) consistent" % (want, ", ".join(n for n, _h, _d in lagging), len(homes))
+
+
 def _steps(profile_home, profile, args):
     changed = {"plugin": False}
 
@@ -1413,7 +1620,9 @@ def _steps(profile_home, profile, args):
         ("profiles", lambda a: step_profiles(profile or "default", args.profile_prefix, a, args.no_profiles)),
         ("other-copies", lambda a: step_other_copies(profile_home, args.profile_prefix, a)),
         ("prompt-budget", lambda a: step_prompt_budget(args.profile_prefix, a)),
-        ("permissions", lambda a: step_permissions(profile_home, profile, args.profile_prefix, a)),
+        ("permissions", lambda a: step_permissions(profile_home, profile, args.profile_prefix, a,
+                                                   getattr(args, "approve_hooks", False))),
+        ("parity", lambda a: step_parity(profile_home, args.profile_prefix, a, args.no_profiles)),
         ("graph-http", lambda a: step_graph_unit(profile_home, a, args.no_service, args.graph_port,
                                                   changed["plugin"])),
         ("proofs-board", lambda a: step_proofs_board(a, args.nightly_proofs and not args.no_cron)),
@@ -1479,6 +1688,9 @@ def main():
                     help="put /crew first in the telegram command menu")
     ap.add_argument("--spill-cap", action="store_true",
                     help="raise hooks.output_spill.max_chars on the installing profile above the /crew preload")
+    ap.add_argument("--approve-hooks", action="store_true",
+                    help="approve, without asking, the shell hooks the install lists as needing consent (a foreign hook "
+                         "that is missing or changed since approved); crew's own hooks never need it")
     ap.add_argument("--graph-port", type=int, default=GRAPH_PORT,
                     help="local port for the crew graph http service (default %d)" % GRAPH_PORT)
     ap.add_argument("--https-port", type=int, default=8445,
@@ -1534,9 +1746,12 @@ def main():
                           publish_tags=tags)
 
     print("crew installer -> %s" % profile_home)
+    not_ready = []
     for name, fn in steps:
         status, detail = fn(True)
         print("%s %s - %s" % (status, name, detail))
+        if status == "FAILED" and name in ("permissions", "parity"):
+            not_ready.append(name)
     print("---")
     r = h(profile, "plugins", "doctor", "crew")
     print((r.stdout or "").strip())
@@ -1549,6 +1764,9 @@ def main():
         if pub.returncode == 0 and name:      # card links in the owner's messages and the board header point here
             _owner_record_set(dashboard_url="https://%s:%d" % (name, args.https_port))
     report(profile, profile_home, args)
+    if not_ready:
+        print("NOT READY: %s (see above)" % ", ".join(not_ready))
+        return 1
     return 0
 
 

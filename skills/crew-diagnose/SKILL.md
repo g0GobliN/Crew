@@ -1,7 +1,7 @@
 ---
 name: crew-diagnose
 description: "Crew read-only pass: /crew-diagnose [state] - every card sitting in that state with its id and reason, then how each would resume. Plans only, it touches nothing."
-version: 0.9.14
+version: 0.9.15
 ---
 
 # /crew-diagnose [state] - a diagnosis per card, and how each would resume
@@ -30,6 +30,9 @@ Every id, state, assignee, kind, wait and reason in your answer is copied from t
 card the reader did not return is left out; a reason is never retyped from memory, never shortened
 into a summary of your own and never softened. If the reader cannot read the board, or answers an
 unknown state, say that in one line and stop - do not fall back to another tool to reconstruct the list.
+
+A first line `WARNING: the gateway is not running ...` is part of the reader's output: keep it as the first line of
+your answer, even when the list is empty, because a card cannot start without the gateway.
 
 If the reader answers zero cards: one line, "no cards in state STATE", and stop. Do not query anything
 else to double-check.

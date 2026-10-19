@@ -17,6 +17,15 @@ function avatar(name, hue){
 function hhmm(d){ function p(x){ return (x<10?"0":"")+x; } return p(d.getHours())+":"+p(d.getMinutes()); }
 
 function ahead(att){ return 'needs you - <b>'+(+att.stuck||0)+'</b> stuck - <b>'+(+att.done||0)+'</b> done'; }
+function drawDispatcher(st){
+  // board.json "dispatcher": the gateway is the kanban dispatcher; without it no card starts.
+  var el=document.getElementById("dispatcher-down"); if(!el) return;
+  if(!st || st.alive!==false){ el.hidden=true; el.innerHTML=""; return; }
+  el.innerHTML="<b>Cards will not start.</b> "+esc(st.detail||"The gateway is not running")+". Start it with <code>"+
+    esc(st.command||"hermes gateway run")+"</code>";
+  el.hidden=false;
+}
+
 function drawNotes(att){
   var bell=document.getElementById("bell"), n=document.getElementById("belln");
   var list=document.getElementById("noterows");
@@ -128,6 +137,7 @@ function draw(d){
   drawHeader(d);
   drawCounts(d.counts||{});
   drawNotes(d.attention);
+  drawDispatcher(d.dispatcher);
   var main=document.getElementById("board"), scroll={};
   Array.prototype.forEach.call(main.querySelectorAll(".lane .lbody"), function(b){
     scroll[b.parentNode.getAttribute("data-lane")] = b.scrollTop; });

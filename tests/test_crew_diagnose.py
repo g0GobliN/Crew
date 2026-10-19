@@ -140,8 +140,19 @@ class MainTests(DiagnoseTestCase):
             code = crew_diagnose.main(argv)
         return code, out.getvalue()
 
+    def test_a_dead_gateway_is_the_first_line(self):
+        self.board()
+        code, text = self.run_main([])
+        self.assertEqual(0, code)
+        self.assertTrue(text.startswith("WARNING: The gateway is not running"), text[:80])
+        self.assertIn("\ndiagnose: 1 card(s) in state blocked", text)
+        code, text = self.run_main(["--json"])
+        self.assertFalse(json.loads(text)["dispatcher"]["alive"])
+
     def test_it_lists_the_card_with_its_id_and_reason(self):
         self.board()
+        with open(os.path.join(self.home, "gateway.pid"), "w", encoding="utf-8") as fh:
+            fh.write(str(os.getpid()))      # a running gateway adds no warning line
         code, text = self.run_main([])
         self.assertEqual(0, code)
         self.assertIn("t_seed01", text)

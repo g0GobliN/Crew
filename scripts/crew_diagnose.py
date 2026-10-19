@@ -136,11 +136,13 @@ def cards_from_rows(rows, now=None):
     return out
 
 
-def render(cards, state, card):
+def render(cards, state, card, warning=""):
     what = "card %s" % card if card else "state %s" % state
+    # first line, before any card: a gateway that is not running explains every card that sits in ready
+    head = ["WARNING: %s" % warning, ""] if warning else []
     if not cards:
-        return "diagnose: 0 card(s) in %s" % what
-    lines = ["diagnose: %d card(s) in %s" % (len(cards), what), ""]
+        return "\n".join(head + ["diagnose: 0 card(s) in %s" % what])
+    lines = head + ["diagnose: %d card(s) in %s" % (len(cards), what), ""]
     for c in cards:
         wait = ("   wait: %s" % c["wait"]) if c["wait"] else ""
         lines.append("id: %s   state: %s   assignee: %s   kind: %s%s"
@@ -174,11 +176,13 @@ def main(argv=None):
         return 2
 
     cards = cards_from_rows(rows)
+    dispatcher = crew_card.dispatcher_state()
     if args.json:
-        print(json.dumps({"state": state, "card": args.card, "count": len(cards), "cards": cards},
-                         indent=2))
+        print(json.dumps({"state": state, "card": args.card, "count": len(cards), "cards": cards,
+                          "dispatcher": dispatcher}, indent=2))
     else:
-        print(render(cards, state, args.card))
+        print(render(cards, state, args.card,
+                     "" if dispatcher["alive"] else crew_card.dispatcher_warning()))
     return 0
 
 

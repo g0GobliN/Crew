@@ -248,7 +248,9 @@ def board_data(include_all=False, older=False):
     return {"generated_at": int(now), "node": platform.node(),
             "live": sum(1 for t in tiles if t["active"]), "lanes": lanes, "counts": counts,
             "cards": len(tiles), "test_cards": len(test_cards),
-            "attention": attention_data(db, tiles, now)}
+            "attention": attention_data(db, tiles, now),
+            # the Board header draws a warning strip when the gateway (the kanban dispatcher) is not running
+            "dispatcher": CG.crew_card.dispatcher_state()}
 
 
 # ---------------------------------------------------------------- notifications
@@ -439,6 +441,8 @@ def board_page(include_all=False, nonce=None):
             "<div id=noterows></div></div></span>"
             "<span class=node>%s - kanban%s <a class=tailnet href='%s/'>link</a>"
             "</span></span></header>"
+            # The warning strip board.js fills when the gateway (the kanban dispatcher) is not running.
+            "<div class=dispatcher-down id=dispatcher-down role=alert hidden></div>"
             "<main id=board></main>"
             # The helpers that draw a lane live at the END of the script body, so the first paint has
             # to come after them: a `draw(INIT)` placed before board.js ran with no helpers defined
