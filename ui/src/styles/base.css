@@ -1,7 +1,10 @@
-/* The only place a colour is decided. Two inherited inputs (host background and foreground); every
-   surface, stroke and text step is the foreground at an alpha, the way the Hermes desktop builds its
-   own ladder. A host that defines --color-* (web dashboard) or --dt-* (desktop) re-skins both pages. */
-:root{
+/* Ported from scripts/crew_dashboard/tokens.css: the only place a colour is decided. Two inherited inputs (host
+   background and foreground); every surface, stroke and text step is the foreground at an alpha. Nothing here may
+   reach a host page: the inputs sit on the OUTERMOST .crew-scope (a wrapper that sets --crew-bg / --crew-fg inline,
+   Desktop from its theme, wins over them; a nested .crew-scope must not re-declare them) and on :root only when the
+   document is our own served shell (#crew-app[data-crew-shell]). The ladder is declared on .crew-scope (and that
+   :root), so it is recomputed from whatever colours the wrapper set. */
+:root:has(#crew-app[data-crew-shell]),.crew-scope:not(.crew-scope .crew-scope){
   /* The page's own scheme, so an embedded mark (the header logo, the tab icon) picks the ink that reads on
      THIS field, not the one the viewer's OS prefers: a black-ring mark on a dark page is an invisible mark.
      The dashboard's field is dark; a light host sets --crew-scheme:light with its --color-* / --dt-* tokens. */
@@ -10,7 +13,9 @@
   --crew-fg: var(--color-foreground, var(--ui-base, #e8eaed));
   --crew-font: var(--dt-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
   --crew-mono: var(--dt-font-mono, ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace);
+}
 
+:root:has(#crew-app[data-crew-shell]),.crew-scope{
   --crew-text-1: color-mix(in srgb, var(--crew-fg) 94%, transparent);
   --crew-text-2: color-mix(in srgb, var(--crew-fg) 74%, transparent);
   --crew-text-3: color-mix(in srgb, var(--crew-fg) 54%, transparent);
@@ -24,13 +29,15 @@
   --crew-overlay: color-mix(in srgb, var(--crew-elevated) 92%, transparent);
   --crew-shadow: color-mix(in srgb, #000 50%, transparent);
 
+  /* Desktop sets --crew-in-running / -blocked / -review / -ready / -done on its wrapper (theme.ts); a nested .crew-scope
+     re-declares the tones below, so the inputs are read here and the browser, which sets none, keeps its fallbacks. */
   /* status tones: running and verified green, blocked/failed red, review/unverified/stale amber, ready
      blue, done teal; todo and pending are neutral. Every state chip on both pages takes one of these. */
-  --crew-tone-running: var(--color-success, #34d399);
-  --crew-tone-blocked: var(--color-destructive, #f87171);
-  --crew-tone-review:  var(--color-warning, #fbbf24);
-  --crew-tone-ready:   #60a5fa;
-  --crew-tone-done:    var(--color-info, #2dd4bf);   /* finished work: its own tone, not the grey of "nothing" */
+  --crew-tone-running: var(--crew-in-running, var(--color-success, #34d399));
+  --crew-tone-blocked: var(--crew-in-blocked, var(--color-destructive, #f87171));
+  --crew-tone-review:  var(--crew-in-review, var(--color-warning, #fbbf24));
+  --crew-tone-ready:   var(--crew-in-ready, #60a5fa);
+  --crew-tone-done:    var(--crew-in-done, var(--color-info, #2dd4bf));   /* finished work: its own tone, not the grey of "nothing" */
   --crew-tone-neutral: var(--crew-text-3);
 
   /* a tone as a tinted box: the wash, its outline, a stronger header wash */
@@ -45,3 +52,19 @@
   --crew-running-glow: color-mix(in srgb, var(--crew-tone-running) 55%, transparent);
   --crew-running-halo: color-mix(in srgb, var(--crew-tone-running) 35%, transparent);
 }
+
+/* the standalone page: the served shell has only <div id="crew-app"> */
+body:has(#crew-app[data-crew-shell]){margin:0;background:var(--crew-bg)}
+#crew-app[data-crew-shell]{height:100vh;height:100dvh;display:flex;flex-direction:column}
+
+/* ── scrollbars, both pages (scoped to the board/card root): a hairline track and a small rounded oval thumb in the theme's own tones ── */
+.crew-scope *{scrollbar-width:thin;scrollbar-color:var(--crew-stroke-1) transparent;}
+.crew-scope ::-webkit-scrollbar{width:8px;height:8px;}
+.crew-scope ::-webkit-scrollbar-track{background:linear-gradient(to right, transparent 3.5px, var(--crew-stroke-2) 3.5px,
+  var(--crew-stroke-2) 4.5px, transparent 4.5px);}
+.crew-scope ::-webkit-scrollbar-track:horizontal{background:linear-gradient(to bottom, transparent 3.5px, var(--crew-stroke-2) 3.5px,
+  var(--crew-stroke-2) 4.5px, transparent 4.5px);}
+.crew-scope ::-webkit-scrollbar-thumb{background:var(--crew-stroke-1);border-radius:999px;border:2px solid transparent;
+  background-clip:padding-box;min-height:28px;}
+.crew-scope ::-webkit-scrollbar-thumb:hover{background-color:var(--crew-text-4);}
+.crew-scope ::-webkit-scrollbar-corner{background:transparent;}

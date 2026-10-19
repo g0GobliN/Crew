@@ -354,7 +354,7 @@ def main():
     if not card:
         print("PROOF FAIL: could not seed the probe card")
         return 2
-    profile = tempfile.mkdtemp(prefix="crew-toparea-")
+    profile = crew_proof_board.chrome_scratch("crew-toparea-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox", "--remote-debugging-port=%d" % PORT,
          "--user-data-dir=" + profile, "--window-size=1400,900", "%s/card/%s" % (URL, card)],

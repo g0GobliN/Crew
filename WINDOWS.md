@@ -52,7 +52,7 @@ for Windows); the proof was not run`. Checking whether a worker process is alive
 natively too (`OpenProcess` and `taskkill /T /F`).
 
 If you use Hermes Desktop, crew's Crew page needs no dashboard server; see
-[Crew in Hermes Desktop](README.md#crew-in-hermes-desktop) for which profile to install into.
+[Hermes Desktop on Windows](#hermes-desktop-on-windows) below.
 
 ### 2. Run the dashboard without systemd
 
@@ -83,6 +83,37 @@ Kanban dispatch runs in **`hermes gateway`**, which holds a single lock at
 `<hermes home>\kanban\.dispatcher.lock`. The Desktop backend can spawn `hermes ... serve`, which answers
 chat but does **not** run the dispatcher - cards sit in `ready` forever. To have open cards actually run,
 drive them from a gateway process pointed at the same kanban home your Desktop uses.
+
+## Hermes Desktop on Windows
+
+Hermes Desktop is the packaged app. A native Hermes install puts it at
+`%LOCALAPPDATA%\hermes\hermes-agent\apps\desktop\release\win-unpacked\Hermes.exe`; the Start Menu entry starts the
+same program. Crew adds a **Crew** page to its sidebar that needs no dashboard server, no systemd and no cron.
+
+1. Install crew into the profile Desktop starts with (with one profile, `default`), skipping the two POSIX-only steps:
+
+   ```bat
+   py -3 crew\install.py --profile NAME --no-cron
+   ```
+
+   (`crew\install.py` is the plugin folder you got from `hermes plugins install macd2/Crew`, or `%CREW%\install.py`
+   from step 1 above.) Desktop mounts the Crew page's data from the profile it was launched with, so a profile you
+   switch to inside the app needs crew too, or a restart of Desktop with that profile.
+2. The installer enables the plugin (`plugins.enabled` in the profile's `config.yaml`). In Desktop open
+   **Capabilities > Plugins**, press **Rescan** and switch on crew's desktop half.
+3. **Crew** appears in the sidebar. `Crew could not load: 404 Not Found` means Desktop was launched with a profile
+   that has no crew: install it there and Rescan. The full list of what the page offers is in
+   [Crew in Hermes Desktop](README.md#crew-in-hermes-desktop).
+
+What was measured, 2026-10-18, on the Windows 11 test VM (Hermes v0.21.7, packaged Desktop, the `e2e` profile with crew
+installed by `install.py --profile e2e --no-cron`, the plugin driven through Desktop's own debugging port):
+
+| Check | Result |
+|---|---|
+| Crew entry in the sidebar after Rescan | present |
+| The native board (no iframe) | drawn, in the app's light theme |
+| A real card (the `e2e` card: 5 nodes, 4 edges) | the card page opened with its flow graph, brief and tokens; a node opened the step panel |
+| Flow pane, button bar (Unstuck, Retry, Proof, Stop, Open chat), chat-style transcripts | added after this run: **not yet measured on Windows**; they ran on Linux Desktop only |
 
 ## What the Windows fixes changed (current `main`)
 

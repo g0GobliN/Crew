@@ -63,7 +63,7 @@ def main():
         print("no chrome binary found"); return 2
 
     url = "http://%s/card/%s" % (args.host, args.card)
-    profile = tempfile.mkdtemp(prefix="crew-click-")
+    profile = crew_proof_board.chrome_scratch("crew-click-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox",
          "--remote-debugging-port=%d" % PORT, "--user-data-dir=" + profile,

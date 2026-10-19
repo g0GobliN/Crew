@@ -3,16 +3,14 @@
 The pages are built in-process by crew's own builders, so every case runs against a real temp kanban board and the
 real crew_graph_serve functions: no daemon, nothing listening. Covers the PR #3 review: the escaped public host,
 the allowlisted routes, the 401 a caller without the dashboard session token gets from Hermes's own auth
-middleware, the CSP + nonce on the page the tab renders via srcdoc, and an /ack write on a temp ack file.
+middleware, the app script the tab runs (/app.js), and an /ack write on a temp ack file.
 """
-import html
 import json
 import os
-import re
 import sys
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -26,8 +24,6 @@ for p in (CREW_ROOT, os.path.join(CREW_ROOT, "scripts")):
 from dashboard import plugin_api  # noqa: E402
 from dashboard.plugin_api import (  # noqa: E402
     router,
-    _sanitize_color,
-    _public_crew_url,
     _CARD_ID_RE,
     _ACK_PATH_RE,
     _AVATAR_PATH_RE,
@@ -113,31 +109,11 @@ class CrewDashboardCustomizationTests(RealBoardCase):
         with open(os.path.join(CREW_ROOT, "dashboard", "dist", "index.js"), "r", encoding="utf-8") as f:
             content = f.read()
         self.assertIn("Hand-written ES5", content)
+        # the tab runs the app in the dashboard page itself: no iframe document, no srcdoc, no postMessage bridge
+        for gone in ("srcdoc", "srcDoc", "iframe", "postMessage", "crew:navigate"):
+            self.assertNotIn(gone, content)
         for leak in ("_SESSION_TOKEN", "__HERMES_SESSION_TOKEN__", "X-Hermes-Session-Token", "token="):
             self.assertNotIn(leak, content)
-
-    def test_color_sanitization_rejects_xss(self):
-        self.assertEqual(_sanitize_color("#041c1c"), "#041c1c")
-        self.assertEqual(_sanitize_color("#fff"), "#fff")
-        self.assertEqual(_sanitize_color("#AABBCC"), "#aabbcc")
-        for bad in ("</style><script>alert(1)</script>", "#041c1c; alert(1)", "red; background: blue",
-                    "expression(alert(1))", "rgba(0,0,0,1)"):
-            self.assertIsNone(_sanitize_color(bad), bad)
-
-    def test_public_crew_url_sanitization(self):
-        ok = MagicMock()
-        ok.headers = {"host": "agent.example.com", "x-forwarded-proto": "https"}
-        ok.url.scheme = "https"
-        self.assertEqual(_public_crew_url(ok), "https://agent.example.com/api/plugins/crew/board")
-
-        for host, proto in (('attacker.com" onclick="alert(1)', "javascript:alert(1)"),
-                            ("evil.com/path", "http"), ("evil.com\\x", "http"), ("a b", "http"),
-                            ("user@evil.com", "http"), ("evil.com'><script>", "https ")):
-            hostile = MagicMock()
-            hostile.headers = {"host": host, "x-forwarded-proto": proto}
-            hostile.url.scheme = "http"
-            url = _public_crew_url(hostile)
-            self.assertRegex(url, r"^https?://127\.0\.0\.1:9119/api/plugins/crew/board$", host)
 
     def test_route_allowlisting_and_validation(self):
         self.assertTrue(_CARD_ID_RE.match("t_12345"))
@@ -166,7 +142,7 @@ class CrewDashboardCustomizationTests(RealBoardCase):
         resp = self.client.get("/api/plugins/crew/card/%s.json" % self.card)
         self.assertEqual(resp.status_code, 200, resp.text)
         import crew_graph_serve
-        code, body, ctype = crew_graph_serve.card_response(self.card + ".json", "n")
+        code, body, ctype = crew_graph_serve.card_response(self.card + ".json")
         self.assertEqual((code, ctype), (200, "application/json"))
         mine, theirs = resp.json(), json.loads(body)
         for d in (mine, theirs):
@@ -194,62 +170,28 @@ class CrewDashboardCustomizationTests(RealBoardCase):
         self.assertEqual(full["cards"], plain["cards"] + 1)
         self.assertNotIn("secret", json.dumps(plain))
 
-    def test_board_page_escapes_host_and_keeps_the_nonce_csp(self):
-        resp = self.client.get(
-            "/api/plugins/crew/board?bg=%3C/style%3E%3Cscript%3Ealert(1)%3C/script%3E",
-            headers={"X-Forwarded-Host": 'evil.com" onmouseover="alert(2)', "X-Forwarded-Proto": "javascript"},
-        )
+    def test_the_tab_runs_the_app_script_and_gets_no_html_page(self):
+        resp = self.client.get("/api/plugins/crew/app.js")
         self.assertEqual(resp.status_code, 200)
-        body = resp.text
-        self.assertNotIn("alert(1)", body)
-        self.assertNotIn("alert(2)", body)
-        self.assertNotIn("javascript", body.split("crew-parent-bridge")[0])
-        self.assertIn('href="http://127.0.0.1:9119/api/plugins/crew/board" target="_blank"', body)
-        self.assertNotIn("set-cookie", resp.headers)
+        self.assertTrue(resp.headers["content-type"].startswith("text/javascript"), resp.headers["content-type"])
         self.assertEqual(resp.headers["cache-control"], "no-store")
         self.assertEqual(resp.headers["x-content-type-options"], "nosniff")
+        self.assertNotIn("set-cookie", resp.headers)
+        with open(os.path.join(CREW_ROOT, "scripts", "crew_dashboard", "app.js"), "rb") as fh:
+            self.assertEqual(resp.content, fh.read())   # the file the standalone server serves, byte for byte
+        self.assertIn(b"__crewMount", resp.content)       # the entry index.js calls
+        # the pages the iframe used to load are gone; a card's JSON is the only thing under /card/
+        self.assertEqual(self.client.get("/api/plugins/crew/board").status_code, 404)
+        page = self.client.get("/api/plugins/crew/card/" + self.card)
+        self.assertEqual(page.status_code, 404)
+        self.assertNotIn("<script", page.text)
 
-        # Header CSP: the page's nonce policy, with base-uri opened for the injected <base>.
-        csp = resp.headers.get("content-security-policy")
-        nonce = re.search(r"'nonce-([^']+)'", csp).group(1)
-        self.assertIn("base-uri 'self'", csp)
-        self.assertNotIn("base-uri 'none'", csp)
-        self.assertIn("script-src 'self' 'nonce-%s'" % nonce, csp)
-        # srcdoc never sees response headers: the same policy rides in a <meta>, minus frame-ancestors.
-        self.assertIn('<meta http-equiv="Content-Security-Policy" content="default-src', body)
-        self.assertNotIn("frame-ancestors", body)
-        # Inside srcdoc 'self' is the dashboard origin: the meta policy's script-src is nonce-only.
-        meta_m = re.search(r'<meta http-equiv="Content-Security-Policy" content="([^"]+)"', body)
-        self.assertIsNotNone(meta_m)
-        meta_policy = html.unescape(meta_m.group(1))
-        script_src = re.search(r"script-src[^;]*", meta_policy).group(0)
-        self.assertEqual(script_src.split(), ["script-src", "'nonce-%s'" % nonce])
-        self.assertIn("default-src 'self'", meta_policy)
-        self.assertIn("connect-src 'self'", meta_policy)
-        # The injected bridge and the page's own script carry the response's nonce, so the policy lets them run.
-        self.assertIn('<script id="crew-parent-bridge" nonce="%s">' % nonce, body)
-        self.assertIn('<script nonce="%s">' % nonce, body)
-        self.assertLess(body.index('<base href="/api/plugins/crew/">'), body.index("crew-parent-bridge"))
-        # Root-absolute links are made relative to the <base>; the real board.js polls board.json.
-        self.assertIn('fetch("board.json', body)
-        self.assertNotIn('fetch("/board.json', body)
-        self.assertIn('title="Open standalone board in new tab"', body)
-        # An <img> load carries no session header: inside the tab the bridge supplies the role face.
-        self.assertIn('return window.__crewFace ? window.__crewFace(p) : p; }', body)
-        # a fresh nonce per response
-        again = self.client.get("/api/plugins/crew/board").headers["content-security-policy"]
-        self.assertNotEqual(re.search(r"'nonce-([^']+)'", again).group(1), nonce)
-
-    def test_card_page_in_the_tab_links_back_through_the_base(self):
-        resp = self.client.get("/api/plugins/crew/card/" + self.card)
-        self.assertEqual(resp.status_code, 200, resp.text)
-        self.assertIn('<base href="/api/plugins/crew/">', resp.text)
-        self.assertIn('window.__crewNav ? window.__crewNav("board")', resp.text)
-        self.assertIn("window.__crewOpenChat = function (profile, session)", resp.text)   # the bridge
-        self.assertIn("cardCoOpen", resp.text)                                            # the card script
-        missing = self.client.get("/api/plugins/crew/card/t_nosuchcard")
-        self.assertEqual(missing.status_code, 404)
-        self.assertIn("no graph for t_nosuchcard", missing.text)
+    def test_index_js_mounts_the_app_with_the_tab_transport(self):
+        with open(os.path.join(CREW_ROOT, "dashboard", "dist", "index.js"), "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn('authedFetch(BASE + "/app.js")', content)
+        self.assertIn("window.__crewMount(hostRef.current, { base: BASE, fetch: SDK.authedFetch", content)
+        self.assertIn('id: "crew-app"', content)
 
     def test_a_failing_builder_answers_500_with_the_detail_in_the_log_only(self):
         import crew_graph_serve
@@ -264,9 +206,8 @@ class CrewDashboardCustomizationTests(RealBoardCase):
         # CREW_LOCAL_UPSTREAM is gone: pointing it at a closed port changes nothing, and urllib is never called.
         with patch.dict(os.environ, {"CREW_LOCAL_UPSTREAM": "http://127.0.0.1:9"}):
             with patch("urllib.request.urlopen", side_effect=AssertionError("network used")):
-                for path in ("/board", "/board.json", "/card/" + self.card, "/card/%s.json" % self.card,
-                             "/avatars/role/worker.svg", "/healthz", "/embed/board", "/embed/card/" + self.card,
-                             "/embed/avatar/role/worker.svg"):
+                for path in ("/app.js", "/board.json", "/card/%s.json" % self.card,
+                             "/avatars/role/worker.svg", "/healthz", "/embed/avatar/role/worker.svg"):
                     self.assertEqual(self.client.get("/api/plugins/crew" + path).status_code, 200, path)
                 self.assertEqual(self.client.post("/api/plugins/crew/embed/ack/all?undo=1").status_code, 200)
         self.assertFalse(hasattr(plugin_api, "UPSTREAM"))
@@ -300,20 +241,20 @@ class HermesTokenAuthTests(RealBoardCase):
 
     def test_no_session_token_is_401_and_builds_nothing(self):
         with patch.object(plugin_api, "_crew") as crew:
-            for path in ("/api/plugins/crew/board", "/api/plugins/crew/card/t_1", "/api/plugins/crew/card/t_1.json",
+            for path in ("/api/plugins/crew/app.js", "/api/plugins/crew/card/t_1.json",
                          "/api/plugins/crew/board.json", "/api/plugins/crew/avatars/role/worker.svg",
-                         "/api/plugins/crew/embed/board"):
+                         "/api/plugins/crew/embed/avatar/role/worker.svg"):
                 self.assertEqual(self.client.get(path).status_code, 401, path)
             self.assertEqual(self.client.post("/api/plugins/crew/ack/all").status_code, 401)
             self.assertEqual(self.client.post("/api/plugins/crew/embed/ack/all").status_code, 401)
-            self.assertEqual(self.client.get("/api/plugins/crew/board",
+            self.assertEqual(self.client.get("/api/plugins/crew/app.js",
                                              headers={"X-Hermes-Session-Token": "wrong"}).status_code, 401)
             crew.assert_not_called()
 
     def test_session_header_as_sent_by_authed_fetch_is_served(self):
-        resp = self.client.get("/api/plugins/crew/board", headers={"X-Hermes-Session-Token": self.token})
+        resp = self.client.get("/api/plugins/crew/app.js", headers={"X-Hermes-Session-Token": self.token})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn('id="crew-parent-bridge"', resp.text)
+        self.assertIn("__crewMount", resp.text)
         self.assertNotIn(self.token, resp.text)
 
 

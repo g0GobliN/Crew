@@ -15,6 +15,7 @@ know the chat and a card under the floor stops before its first call.
 
 Exit 0 = every check passed.
 """
+import atexit
 import json
 import os
 import shutil
@@ -140,6 +141,7 @@ def main():
         print("PROOF OK: the intake's kanban_create is gated, completed and recorded on the kernel's own tool")
         return rc
     tmp = tempfile.mkdtemp(prefix="crew-intake-create-proof-")
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
     db = os.path.join(tmp, "kanban.db")
     if not board.init_board(db):
         print("PROOF FAIL: the scratch board could not be created")

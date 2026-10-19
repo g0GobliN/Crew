@@ -1440,7 +1440,7 @@ def _crew_banner():
 
 def _board_url():
     """Where the owner watches the crew: crew_card.dashboard_url() (CREW_DASHBOARD_URL, the --publish address, else
-    the local service). "" when the card tool cannot be loaded; the reply then has no Board line."""
+    the local service). "" when the card tool cannot be loaded; the reply then has no link line."""
     tool = _card_tool()
     if tool is None:
         return ""
@@ -1462,19 +1462,70 @@ def _gateway_down_line():
         return ""
 
 
-def _banner_open():
-    """The preload prefix that makes the intake open its reply with the line, and names the board the card-open
-    reply links to (owner, 2026-10-19: the terminal owner needs the dashboard URL once the run starts)."""
+# The surface the /crew turn runs on. pre_llm_call hands the hook `platform=` (hermes-agent agent/turn_context.py:799-813,
+# platform=agent.platform); Hermes Desktop's chat panel is "desktop" and the terminal pane / `hermes --tui` is "tui"
+# (tui_gateway/server.py:1564-1567, _resolve_session_platform); the CLI is "cli"; a gateway chat is its channel name.
+# Fallback: HERMES_SESSION_PLATFORM / HERMES_SESSION_SOURCE (gateway/session_context.py:41, :194).
+# Desktop has no chat link that opens a plugin page: markdown renders a non-http href as <a target=_blank>
+# (apps/desktop/src/components/assistant-ui/markdown-text.tsx:322-340), the window-open handler denies every such open
+# (electron/main.ts:13544, window-open-policy.ts:92) and openExternalUrl admits only http/https/mailto
+# (electron/external-open.ts:71,131), so hermes://open/crew and #/crew?card= do nothing from chat. Desktop's own
+# host.navigate (the blocked-card toast) is not reachable from a chat message, and on Windows no dashboard server runs. So
+# Desktop gets a plain pointer to the Crew page and the flow pane (owner, 2026-10-19); every other surface gets the
+# "Crew Dashboard" URL.
+LINK_LABEL_DEFAULT = "Crew Dashboard"
+
+# The proof-safety question as the intake asks it in Hermes Desktop (markdown): a bold lead, the proof in a code block, the
+# hint as the last italic line. The two choices stay the clarify `choices` (clickable rows), so they are not repeated here.
+SAFETY_QUESTION_DESKTOP = (
+    "Hermes Desktop shows a clarify question as PLAIN TEXT with line breaks kept "
+    "(apps/desktop/src/components/assistant-ui/clarify/core/question-block.tsx:46, whitespace-pre-wrap, no markdown), so "
+    "every clarify `question` you ask in Desktop is plain text: no **, no backticks, no code fences, no markdown lists; "
+    "use line breaks instead. The proof safety question (only when the proof safety mode is safe) is EXACTLY this, the "
+    "proof command filled in on its own line, the `choices` as the skill gives them:\n\n"
+    "Proof safety: how careful should crew be?\n\nProofs run unattended. The proof:\n<the proof command>\n\n"
+    "/crew-safety brave stops this question for good.\n\n")
+
+
+def _surface(platform=""):
+    """The platform of this turn: the hook's `platform=`, else the session variables; "" when unknown."""
+    value = str(platform or "").strip().lower()
+    return value or (_session_get("HERMES_SESSION_PLATFORM") or _session_get("HERMES_SESSION_SOURCE")).strip().lower()
+
+
+def _link_line(platform=""):
+    """The last line of the card-open reply. Desktop: the pointer to the Crew page (no URL). Elsewhere, with `<id>` for the
+    model to fill: "Crew Dashboard: <dashboard URL>/card/<id>", "" when no dashboard URL is known."""
+    if _surface(platform) == "desktop":
+        tool = _card_tool()
+        return tool.DESKTOP_LINE if tool is not None else ""
     url = _board_url()
-    board = ("The crew board is at %s - the card-open reply names it on its Board: line.\n\n" % url) if url else ""
+    return "%s: %s/card/<id>" % (LINK_LABEL_DEFAULT, url) if url else ""
+
+
+def _banner_open(platform=""):
+    """The preload prefix that makes the intake open its reply with the line, and names the link the card-open reply
+    ends with (owner, 2026-10-19: the link is the LAST line, after the notify line; in Desktop it points to the Crew
+    page and Ctrl+J, elsewhere "Crew Dashboard")."""
+    link = _link_line(platform)
+    if link and _surface(platform) == "desktop":
+        # Hermes Desktop renders the reply as markdown (markdown-text.tsx): bold lead, plain notify line, the pointer as a quote.
+        tail = ("Hermes Desktop renders markdown. Write the card-open reply EXACTLY in this shape (<id> and <title> filled in):\n\n"
+                "**Card open** · `<id>` · <title>\n\nI'll notify you here when it's done or if it needs you.\n\n> %s\n\n"
+                "The quote line is the LAST line, after the \"I'll notify you here...\" line, and nothing follows it. Start the watcher "
+                "with `--md` after `watch --card <id>`; when its ending comes back, send it to the owner as it is (it is already "
+                "markdown, ending with the same pointer), do not reword it.\n\n" % link) + SAFETY_QUESTION_DESKTOP
+    else:
+        tail = ("The card-open reply's LAST line, after the \"I'll notify you here...\" line, is this one, with <id> (if any) replaced "
+                "by the card id, verbatim otherwise: %s\n\n" % link) if link else ""
     down = _gateway_down_line()
     gateway = ("The Hermes gateway is not running, so the card cannot start. Add this line to the card-open reply, "
-               "right after the Board line, verbatim: %s\n\n" % down) if down else ""
+               "right after the \"I'll notify you here...\" line and before the last line, verbatim: %s\n\n" % down) if down else ""
     return ("Open your reply with this line, verbatim, as its first line, then carry on with the intake:\n\n"
-            "%s\n\n%s%s" % (_crew_banner(), board, gateway))
+            "%s\n\n%s%s" % (_crew_banner(), tail, gateway))
 
 
-def crew_intake_preload(user_message=None, session_id=None, turn_id=None, **_kw):
+def crew_intake_preload(user_message=None, session_id=None, turn_id=None, platform=None, **_kw):
     """Record a /crew turn, open its intake window, and preload the crew skill when `/crew <ask>`
     reaches the model unexpanded.
 
@@ -1513,7 +1564,7 @@ def crew_intake_preload(user_message=None, session_id=None, turn_id=None, **_kw)
         _open_window(session_id)
         _record_brief(session_id, _expanded_ask(user_message))
         facts = _intake_facts()
-        return {"context": _banner_open() + facts}
+        return {"context": _banner_open(platform) + facts}
     m = CREW_SLASH_RX.match(user_message)
     if not m:
         return None
@@ -1524,7 +1575,7 @@ def crew_intake_preload(user_message=None, session_id=None, turn_id=None, **_kw)
     if body is None:
         return None
     ask = (m.group(1) or "").strip()
-    return {"context": _banner_open() + (
+    return {"context": _banner_open(platform) + (
         "The `crew` skill is already loaded; its full text follows. Do not call skill_view or "
         "skills_list for it. The owner's ask is: \"%s\". Apply Rule 1 first: if the ask names no "
         "target and no measurable end state, ask through the clarify tool - one batch, no research "

@@ -135,9 +135,40 @@ colour alone (green alive, gold done, red failed), Sugiyama layered layout, step
 order. It reads the shared kanban board (`kanban.db`) and the per-profile session store
 (`state.db`, `sessions` + `messages`), both read-only; the worker session is the card's
 `tasks.session_id` when set, else matched by run time window. Run the script directly for the
-extra modes: `python3 scripts/crew_graph.py --card ID [--watch N|--json PATH|--html PATH]`.
-Always-on: `crew_graph_serve.py` (unit `crew-graph-http.service`) serves the index at `/`,
-the live page at `/card/<id>`, its data at `/card/<id>.json` and `/healthz`, rebuild per request.
+extra modes: `python3 scripts/crew_graph.py --card ID [--watch N|--json PATH|--html PATH]`
+(`--html` writes one file: the dashboard app inlined plus a snapshot of the card, no server needed, no polling).
+Always-on: `crew_graph_serve.py` (unit `crew-graph-http.service`) serves one thin page at `/` and `/card/<id>`
+(it loads `/app.js`, the React app in `scripts/crew_dashboard/app.js`), the data at `/board.json`,
+`/card/<id>.json` and `/healthz`, rebuilt per request. A card id that names no card answers 404.
+
+### Card JSON fields the Desktop UI reads
+
+- `situation.proof_ask`: the kind of proof question waiting for the owner (`"blocked"`: Hermes flagged the proof
+  command; `"rescope"`: the coordinator proposed a new one), `""` when none. It switches the **Proof** button on
+  (`crew_graph.proof_ask_kind`, from `crew_card.pending_proof_ask`).
+- `nodes[].text[]`, the transcript of a run or session node: `{ts, text, raw?}`. `text` is the message on one line
+  (whitespace folded), which the browser's `.msg p` draws. `raw` is the same words with their newlines (trailing
+  blanks trimmed, blank-line runs folded to one), present only when it differs from `text`; Hermes Desktop hands
+  it to the chat's markdown renderer so lists and code fences stay lists and code fences
+  (`crew_graph._say_raw`).
+
+### Action route (Desktop's button bar)
+
+`POST /api/plugins/crew/action/{unstuck|retry|proof|stop}`, served in-process by `dashboard/plugin_api.py`. The same
+commands as `/crew-unstuck`, `/crew-proof`, `/crew-stop` and the retry of `crew_card.py`, so a button and a slash
+command do the same thing.
+
+| Field | Meaning |
+|---|---|
+| `card` (required) | the card id, `t_` plus hex; anything else answers 400 `Invalid card ID format` |
+| `mode` (`proof` only) | `yes` (default) accepts the proposed command, `brave` runs a flagged one; any other value is 400 |
+| `confirm` (`stop` only) | must be `true`: a stop kills the run and parks the card, so a call without it is 400 and nothing happens |
+
+The name is checked against the four-name allowlist again on the server (unknown name: 400 `unknown action`). The
+answer is `{"ok": bool, "text": str}`; a command that raises answers `ok: false` with the reason, never a hang. The
+UI offers a button only when the card's state allows it (`ui/src/components/ActionBar.tsx`: Unstuck on a triage,
+blocked or parked card, Retry on a done, blocked, failed or triage one, Proof when `situation.proof_ask` is set, Stop while a
+run is live) and asks the app's confirm dialog before Stop.
 
 ## Roles in the graph
 
@@ -223,7 +254,12 @@ scripts/crew_notify.py         the owner's return path: done / needs-you / aband
 scripts/crew_lessons.py        the lessons file: record (the `crew_lesson` tool), per-role injection blocks
 scripts/crew_watch.py          the in-session watcher (`crew_card.py watch --card <id>`): the intake runs it as a background terminal so a CLI session is told the ending; records it in notify-state so crew_notify stays silent
 scripts/crew_graph.py          live flow graph (terminal + --watch + self-contained HTML)
-scripts/crew_graph_serve.py    always-on HTTP surface for the graph (/ , /card/<id>, /card/<id>.json, /healthz)
+scripts/crew_graph_serve.py    always-on HTTP surface for the graph (the shell at / and /card/<id>, /app.js, /board.json, /card/<id>.json, /healthz)
+scripts/crew_dashboard/app.js  the dashboard app (board, card page, flow graph) for the browser; GENERATED from ui/src/browser.tsx
+scripts/crew_dashboard/avatars/ + mark.svg + favicon.svg   the role faces, the header mark and the tab icon the server serves
+desktop/plugin.js      the Hermes Desktop page, GENERATED from ui/src/desktop.tsx (same components as app.js)
+dashboard/             the Hermes web dashboard tab: manifest.json, dist/index.js (fetches app.js with the SDK's authedFetch and runs it), plugin_api.py (the JSON routes, /app.js, `POST /action/<name>`, the JSON avatar at `/embed/avatar/*`)
+ui/                    source of both generated files (TSX), `node ui/build.mjs` builds, `--check` proves they are current
 scripts/crew_option_commands_proof.py  proof that every option is its own command in the live registry
 scripts/crew_proofs.py         runs every proof, each on the crew-proofs board (see "Proofs" below)
 scripts/crew_proof_board.py    the proofs board: its env, the exit-2 guard, scratch boards, a dashboard for a proof

@@ -10,6 +10,8 @@ the graph JSON the package emits, the page HTML, and the board.
 Exit 0 when every check passes. Every check prints one PASS/FAIL line with the measured value.
 """
 import argparse
+import atexit
+import shutil
 import json
 import os
 import re
@@ -60,6 +62,7 @@ def main():
     a = ap.parse_args()
 
     tmp = tempfile.mkdtemp(prefix="crewflow-")
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
     gj = os.path.join(tmp, "graph.json")
     code, out = run_graph(a.package, a.card, gj)
     if not check("graph builds for %s" % a.card, code == 0 and os.path.exists(gj), out[:200]):
@@ -168,7 +171,7 @@ def main():
     check("timeline carries step kinds", len({e.get("kind") for e in evs}) >= 2,
           "kinds=%s" % sorted({e.get("kind") for e in evs if e.get("kind")}))
 
-    # 5. the page is self-contained and has the scrubber
+    # 5. the page is self-contained (the app inlined, the card embedded) and has the scrubber
     html_path = os.path.join(tmp, "page.html")
     r = subprocess.run([sys.executable, os.path.join(a.package, "scripts", "crew_graph.py"),
                         "--card", a.card, "--html", "--outdir", tmp],
@@ -184,9 +187,13 @@ def main():
                          r"https?://(?!127\.0\.0\.1|localhost)", re.I)
         check("no external URLs in the page",
               not ext.search(html), "%d match(es)" % len(ext.findall(html)))
-        check("page has a timeline scrubber", bool(re.search(r"id=[\"']scrubber[\"']", html)),
+        # the file is the app plus the card's snapshot: the scrubber and the legend exist once the app has drawn
+        # the page, so they are read from the DOM headless Chrome draws from the file
+        import crew_proof_board
+        dom = crew_proof_board.render_dom("file://" + cand[0], budget_ms=6000)
+        check("page has a timeline scrubber", bool(re.search(r"id=[\"']scrubber[\"']", dom)),
               "scrubber element")
-        check("page has a role legend", bool(re.search(r"roster|role-legend", html)), "legend")
+        check("page has a role legend", bool(re.search(r"id=[\"']roster[\"']", dom)), "legend")
 
     failed = [n for n, ok, _ in CHECKS if not ok]
     print("\n%d checks, %d passed, %d failed" % (len(CHECKS), len(CHECKS) - len(failed), len(failed)))

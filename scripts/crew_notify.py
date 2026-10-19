@@ -167,9 +167,57 @@ def done_summary(conn, task):
     return short((run["summary"] if run else None) or task["result"] or "", 600)
 
 
-def _text(conn, task, kind, src, question="", extra=""):
+def _md_extra(extra):
+    """`Key: value` lines of the caller's extra block as a compact list, other sentences as plain lines."""
+    out = []
+    for line in (extra or "").strip("\n").splitlines():
+        m = re.match(r"^(Lands at|Proof):\s*(.*)$", line)
+        out.append("- **%s:** %s" % (m.group(1), m.group(2)) if m else line)
+    return "\n".join(out)
+
+
+def _text_md(conn, task, kind, src, question="", extra=""):
+    """The same message as `_text`, as markdown for a Hermes Desktop chat: a bold status lead, the body, the
+    contract-style list, and the Crew pointer (crew_card.DESKTOP_LINE) LAST as a blockquote."""
+    tid, title = task["id"], short(task["title"], 120)
+    lead = {"done": "**Done**", "abandoned": "**Abandoned**", "needs": "**Needs you**"}[kind]
+    parts = ["%s · `%s` · %s" % (lead, tid, title)]
+    if kind == "done":
+        summary = done_summary(conn, task)
+        if summary:
+            parts.append(summary)
+    elif kind == "abandoned":
+        dec = conn.execute("select payload from task_events where task_id=? and kind='crew_decision' "
+                           "order by id desc limit 1", (tid,)).fetchone()
+        try:
+            why = (json.loads(dec["payload"] or "{}") or {}).get("why") if dec else ""
+        except ValueError:
+            why = ""
+        if why:
+            parts.append(short(why, 200))
+    else:
+        ev = conn.execute("select payload from task_events where task_id=? and kind in "
+                          "('blocked','gave_up','crashed','timed_out') order by id desc limit 1", (tid,)).fetchone()
+        try:
+            reason = (json.loads(ev["payload"] or "{}") or {}).get("reason") if ev else ""
+        except ValueError:
+            reason = ""
+        reason = short(question or reason or task["last_failure_error"] or "", 300)
+        if reason and reason != "initial_status":
+            parts.append(reason)
+    if src and src != tid:
+        parts.append("From card: `%s` (this card was created under it)" % src)
+    if extra and extra.strip():
+        parts.append(_md_extra(extra))
+    parts.append("> " + crew_card.DESKTOP_LINE)
+    return "\n\n".join(parts)
+
+
+def _text(conn, task, kind, src, question="", extra="", md=False):
     """The message for one ending. `extra` is lines the caller adds above the card link (crew_watch: what was
-    delivered where, the proof outcome, how to answer)."""
+    delivered where, the proof outcome, how to answer). `md`: the Hermes Desktop form (`_text_md`)."""
+    if md:
+        return _text_md(conn, task, kind, src, question, extra)
     tid, title = task["id"], short(task["title"], 120)
     tail = "\nFrom card: %s (this card was created under it)" % src if src and src != tid else ""
     link = "%s\nCard: %s" % (("\n" + extra.strip("\n")) if extra else "", card_url(tid))

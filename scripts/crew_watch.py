@@ -91,7 +91,7 @@ def done_report(conn, db, tid, now):
     return "\n".join(x for x in (N.done_summary(conn, task), _extra(conn, db, "done", chain, task, dec)) if x)
 
 
-def check(db, tid, state_path, now):
+def check(db, tid, state_path, now, md=False):
     """One poll: None while there is nothing to tell, else (text, [(card, key)] to record as sent)."""
     conn = sqlite3.connect("file:%s?mode=ro" % db, uri=True, timeout=10)
     conn.row_factory = sqlite3.Row
@@ -109,7 +109,7 @@ def check(db, tid, state_path, now):
             src = tid if task["id"] != tid else ""
             if src:             # a follow-up's ending is the original card's: its name, its title
                 task = dict(task, title=_task(conn, tid)["title"])
-            text = N._text(conn, task, kind, src, question, _extra(conn, db, kind, chain, task, dec))
+            text = N._text(conn, task, kind, src, question, _extra(conn, db, kind, chain, task, dec), md=md)
             return text, [(task["id"], key)]
         if reports and reports[-1][1] in ("done", "abandoned"):
             return "crew watch: %s already reported to you in chat." % task["id"], []
@@ -124,12 +124,12 @@ def check(db, tid, state_path, now):
         conn.close()
 
 
-def watch(db, tid, state_path, poll=POLL_S, lifetime=MAX_LIFETIME_S, sleep=time.sleep, now=time.time):
+def watch(db, tid, state_path, poll=POLL_S, lifetime=MAX_LIFETIME_S, sleep=time.sleep, now=time.time, md=False):
     """Poll until `check` has something, record it as sent, return the text; at `lifetime` return the 'still running'
     line (nothing recorded: crew_notify reports the ending when it comes)."""
     deadline = now() + lifetime
     while True:
-        got = check(db, tid, state_path, now())
+        got = check(db, tid, state_path, now(), md)
         if got:
             text, marks = got
             for card, key in marks:
@@ -147,12 +147,13 @@ def main(argv=None):
     ap.add_argument("--state", default=None, help="notify state file (default: $HERMES_HOME/crew/notify-state.json)")
     ap.add_argument("--poll", type=int, default=POLL_S)
     ap.add_argument("--lifetime", type=int, default=MAX_LIFETIME_S, help="seconds before 'still running'")
+    ap.add_argument("--md", action="store_true", help="markdown ending, Desktop pointer last (Hermes Desktop chat)")
     a = ap.parse_args(argv)
     db = a.db or crew_card.kanban_db()
     if not db or not os.path.exists(db):
         print("no board")
         return 2
-    print(watch(db, a.card, a.state or N.state_file(os.environ.get("HERMES_KANBAN_BOARD")), a.poll, a.lifetime))
+    print(watch(db, a.card, a.state or N.state_file(os.environ.get("HERMES_KANBAN_BOARD")), a.poll, a.lifetime, md=a.md))
     return 0
 
 

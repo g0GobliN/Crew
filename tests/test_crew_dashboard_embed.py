@@ -1,13 +1,12 @@
-"""The Hermes Desktop embed routes (dashboard/plugin_api.py /embed/*): JSON envelopes around the real pages.
+"""The Hermes Desktop routes (dashboard/plugin_api.py /embed/*): JSON envelopes for what ctx.rest cannot carry.
 
-Built in-process from crew's own builders on a real temp kanban board; no daemon and no port. The existing routes must
-answer exactly as before: the tab's pages keep their <base> and tab bridge.
+ctx.rest answers JSON only, so a role's face comes as a data URL (/embed/avatar) and an ack's plain-text answer inside
+an envelope (/embed/ack). The HTML envelopes (/embed/board, /embed/card) and the postMessage bridge went away with the
+iframe. Built in-process from crew's own builders on a real temp kanban board; no daemon and no port.
 """
 import base64
-import html
 import json
 import os
-import re
 import sys
 import tempfile
 import unittest
@@ -40,64 +39,11 @@ class EmbedRouteTests(RealBoardCase):
     def setUp(self):
         self.client = _client()
 
-    def test_embed_board_envelope_has_no_base_and_a_nonced_bridge(self):
-        resp = self.client.get(API + "/embed/board")
-        self.assertEqual(resp.status_code, 200, resp.text)
-        self.assertTrue(resp.headers["content-type"].startswith("application/json"))
-        env = resp.json()
-        self.assertEqual(set(env), {"html", "nonce"})
-        page, nonce = env["html"], env["nonce"]
-        self.assertTrue(nonce)
-        self.assertNotRegex(page, r"<base\b")
-        self.assertIn('<script id="crew-desktop-bridge" nonce="%s">' % nonce, page)
-        # the page's own scripts carry the same nonce, so the meta policy lets them and the bridge run
-        policy = html.unescape(re.search(r'http-equiv="Content-Security-Policy" content="([^"]*)"', page).group(1))
-        self.assertIn("'nonce-%s'" % nonce, policy)
-        self.assertNotIn("frame-ancestors", policy)
-        self.assertNotIn("'self'", re.search(r"script-src[^;]*", policy).group(0))
-        # the tab bridge and the standalone-board link are not in the embed
-        self.assertNotIn("crew-parent-bridge", page)
-        self.assertNotIn("class=tailnet", page)
-
-    def test_embed_board_is_the_standalone_board(self):
-        import crew_graph_serve
-        env = self.client.get(API + "/embed/board").json()
-        # anchor: lib.js faceUrl is rewritten for the bridge, everything else of board.js is the served script
-        self.assertIn("window.__crewFace", env["html"])
-        self.assertIn('fetch("/board.json"', env["html"])
-        standalone = crew_graph_serve.board_page(False, env["nonce"])
-        body = re.sub(r'<script id="crew-desktop-bridge".*?</script>', "", env["html"], flags=re.S)
-        body = re.sub(r"<meta http-equiv=.*?>", "", body)
-        # the same page once the three embed edits are undone
-        self.assertEqual(len(body.split("<script")), len(standalone.split("<script")))
-
-    def test_bridge_is_inert_outside_a_frame_and_only_in_embed_routes(self):
-        self.assertIn("(function () {\n  if (window.parent === window) return;", plugin_api._EMBED_BRIDGE_JS)
-        import crew_graph_serve
-        self.assertNotIn("crew-desktop-bridge", crew_graph_serve.board_page(False, "n"))
-        self.assertNotIn("__crewOpenChat = ", crew_graph_serve.board_page(False, "n"))   # standalone: no bridge, no button host
-        tab = self.client.get(API + "/board")
-        self.assertNotIn("crew-desktop-bridge", tab.text)
-        self.assertIn('<base href="/api/plugins/crew/">', tab.text)   # the tab proxy is unchanged
-
-    def test_embed_card_page_for_a_real_card(self):
-        resp = self.client.get(API + "/embed/card/" + self.card)
-        self.assertEqual(resp.status_code, 200, resp.text)
-        page = resp.json()["html"]
-        self.assertIn('id="crew-desktop-bridge"', page)
-        self.assertNotRegex(page, r"<base\b")
-        self.assertIn('window.__crewNav ? window.__crewNav("board")', page)   # the "o" shortcut goes through the bridge
-        self.assertNotIn('window.location.href = "/";', page)
-        self.assertIn("window.__crewOpenChat = function (profile, session)", page)
-        self.assertIn("cardCoOpen", page)
-
-    def test_embed_card_id_validation(self):
-        for bad in ("t_1.json", "t_1%2Fx", "..", "t_1.html"):
-            self.assertIn(self.client.get(API + "/embed/card/" + bad).status_code, (400, 404), bad)
-        # a well-formed id reaches the real card page: upstream answers for the card (no graph), not the proxy
-        resp = self.client.get(API + "/embed/card/t_nosuchcard")
-        self.assertEqual(resp.status_code, 404)
-        self.assertIn("no graph for t_nosuchcard", resp.text)   # the builder's own answer, passed through unwrapped
+    def test_the_iframe_routes_and_the_page_routes_are_gone(self):
+        for path in ("/embed/board", "/embed/card/" + self.card, "/embed/card/t_nosuchcard", "/board"):
+            self.assertEqual(self.client.get(API + path).status_code, 404, path)
+        self.assertFalse(hasattr(plugin_api, "_EMBED_BRIDGE_JS"))
+        self.assertFalse(hasattr(plugin_api, "_BRIDGE_JS"))
 
     def test_embed_avatar_data_url_and_validation(self):
         resp = self.client.get(API + "/embed/avatar/role/worker.svg")
@@ -139,10 +85,10 @@ class EmbedFailureTests(RealBoardCase):
     def test_a_failing_builder_is_a_500_not_a_hang_and_ack_keeps_its_envelope(self):
         import crew_graph_serve
         client = _client()
-        with patch.object(crew_graph_serve, "board_page", side_effect=OSError("disk gone")), \
+        with patch.object(crew_graph_serve, "face_svg", side_effect=OSError("disk gone")), \
                 patch.object(crew_graph_serve, "ack_all", side_effect=OSError("disk gone")):
             with self.assertLogs(plugin_api._log, "ERROR"):
-                resp = client.get(API + "/embed/board")
+                resp = client.get(API + "/embed/avatar/role/worker.svg")
                 ack = client.post(API + "/embed/ack/all")
         self.assertEqual(resp.status_code, 500)
         self.assertNotIn("disk gone", resp.text)

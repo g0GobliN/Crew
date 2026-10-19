@@ -5,8 +5,8 @@ Done when the board surface carries the notifications behind a bell in the heade
 how many rows are waiting, a click opens the list (every stuck card first, then the done cards), and
 each row is cleared one by one or the whole list is cleared at once.
 
-Contract pinned here (stdlib only, no browser; the page is JS-rendered, so the data surface and the
-served source are checked):
+Contract pinned here (the data surface over HTTP; the page is the React app, so its markup is read from headless
+Chrome's DOM (crew_proof_board.render_dom) and its source from /app.js):
   /board.json   gains a "notifications" object under attention:
                   {"rows": [{"id","status","who","age_s","entered_ts","ack_url"}...],
                    "stuck": N, "done": N, "total": N, "ack_all": "/ack/all"}
@@ -19,9 +19,9 @@ served source are checked):
   /ack/all      clear every notification at once - the waiting cards and EVERY done card, not only the
                 rows one screen shows; /ack/all?undo=1 restores them. Both are scoped the same way: a
                 cleared done card stays cleared, a cleared waiting card returns when that card moves on.
-  the served page: the bell (#bell, an inline SVG) sits in the header with the count (#belln), the
-  number is server-rendered before any script, the panel (#notes) hangs off the bell ahead of
-  <main id=board> and starts closed, and the panel carries a clear-all control for /ack/all.
+  the drawn page: the bell (#bell, an inline SVG) sits in the header with the count (#belln) equal to
+  the json's total, the panel (#notes) hangs off the bell ahead of <main id=board> and starts closed,
+  and the panel carries a clear-all control for /ack/all.
 
 Read-only except for the clears it undoes again at the end.
 Exit 0 = every check passed. Non-zero = it did not, and the failing check is printed.
@@ -44,6 +44,12 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import crew_card  # noqa: E402 - the fixture assignee and the probe marker
 import crew_proof_board  # noqa: E402
+# The owner's clears live in an ack file beside the board. The proofs board's one shared file kept a killed or
+# concurrent run's clears (a cleared seed card stays cleared), and the next run then saw no done rows or a total that
+# did not come back. This run clears in a file of its own, removed at exit.
+ACK_DIR = tempfile.mkdtemp(prefix="crew-attention-acks-")
+if not os.environ.get("CREW_ACK_FILE"):
+    os.environ["CREW_ACK_FILE"] = os.path.join(ACK_DIR, "attention_acks.json")
 URL = crew_proof_board.graph_base()
 KANBAN_DB = crew_proof_board.proof_db()
 DONE_CAP = 15
@@ -153,6 +159,7 @@ def main():
         return run_proof()
     finally:
         drop()
+        shutil.rmtree(ACK_DIR, ignore_errors=True)
 
 
 def run_proof():
@@ -214,19 +221,27 @@ def run_proof():
                                                   att.get("total"), len(rows)))
     check("the list names its own clear-all", att.get("ack_all") == "/ack/all")
 
-    page_status, page = fetch("/")
-    bell = re.search(r"id=belln[^>]*>(\d+)<", page)
+    # The page is the React app (a thin shell plus /app.js), so the markup is what headless Chrome draws from the
+    # served JSON, and the app's own source is /app.js.
+    page_status, _shell = fetch("/")
+    page = crew_proof_board.render_dom(URL + "/")
+    app_status, app_js = fetch("/app.js")
+    bell = re.search(r'id="belln"[^>]*>(\d+)<', page)
     check("the bell is in the header with a count badge",
           page_status == 200 and re.search(r"id=[\"']?bell[\"']?", page) is not None
           and bell is not None and "svg" in page)
-    check("the count is server-rendered before any script",
+    # The old page carried the count in its server-rendered markup ("before any script"); the shell has no data of
+    # its own, so the claim that remains is that the drawn count is the JSON's.
+    check("the drawn count is the json's total",
           bell is not None and int(bell.group(1)) == att.get("total"),
           "page %s vs json %s" % (bell.group(1) if bell else "-", att.get("total")))
     check("the panel hangs off the bell, ahead of the board, closed",
-          re.search(r"id=[\"']?notes[\"']?\s+hidden", page) is not None
-          and 0 < page.find("id=bellwrap") < page.find("main id=board"))
-    check("the panel offers clear-all at /ack/all", "/ack/all" in page and "clear all" in page)
-    check("a row clears through its own ack link", ".ack_url" in page)
+          re.search(r'id="notes"\s+hidden', page) is not None
+          and 0 < page.find('id="bellwrap"') < page.find('id="board"'))
+    check("the panel offers clear-all at /ack/all",
+          app_status == 200 and "/ack/all" in app_js and 'id="clearall"' in page and "clear all" in page)
+    check("a row clears through its own ack link",
+          app_status == 200 and "'/ack/' + " in app_js.replace('"', "'") and (not rows or 'title="clear this one"' in page))
 
     # Live legs. Each clear is undone in a finally: a proof killed between the two would leave real
     # notifications hidden, and only the owner could tell that from a backlog that was really gone.
@@ -256,7 +271,7 @@ READ_PANEL = """(function(){
 READ_HIDDEN = "document.getElementById('notes').hidden"
 
 
-def wait_for_target(port, fragment, tries=40):
+def wait_for_target(port, fragment, tries=80):
     """The page's own target from the debugger, once the browser has it open."""
     for _ in range(tries):
         try:
@@ -278,9 +293,9 @@ def browser_leg():
     if not chrome:
         print("%-58s SKIP  no chrome/chromium on this box" % "the bell in a real browser")
         return True
-    port = int(os.environ.get("CREW_PROOF_CDP_PORT", "9431"))
-    profile_dir = os.path.join(tempfile.gettempdir(), "crew-attention-chrome")
-    chrome_log = tempfile.mkdtemp(prefix="crew-attention-browser-")
+    port = int(os.environ.get("CREW_PROOF_CDP_PORT") or crew_proof_board.free_port())
+    chrome_log = crew_proof_board.chrome_scratch("crew-attention-browser-")
+    profile_dir = os.path.join(chrome_log, "profile")
     proc = subprocess.Popen([chrome, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox",
                              "--remote-debugging-port=%d" % port, "--window-size=1400,900",
                              "--user-data-dir=" + profile_dir, URL + "/"],

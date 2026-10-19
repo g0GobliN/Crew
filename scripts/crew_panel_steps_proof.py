@@ -43,7 +43,7 @@ if HERE not in sys.path:
 import crew_proof_board  # noqa: E402
 URL = (os.environ.get("CREW_GRAPH_URL") or os.environ.get("CREW_GRAPH_BASE")
        or "http://127.0.0.1:8799").rstrip("/")
-PORT = int(os.environ.get("CREW_GRAPH_CDP_PORT", "9347"))
+PORT = int(os.environ.get("CREW_GRAPH_CDP_PORT") or crew_proof_board.free_port())
 CHROME = crew_proof_board.find_chrome()
 FAILURES = []
 CHECKS = 0
@@ -84,11 +84,13 @@ JS = r"""
 })()
 """
 
-# --- the Calls tab: one bounded box, the filter on top, every row folded, newest first -----------------
+# --- the Calls tab (clicked first, read after React drew it): one bounded box, the filter on top, every row folded, newest first -----------------
+CALLS_CLICK_JS = r"""
+(function(){ var t = document.querySelector('#panel .ptabs [data-tab="Calls"]'); if(t) t.click(); return !!t; })()
+"""
 CALLS_JS = r"""
 (function(){
   var p = document.getElementById('panel');
-  var tab = p.querySelector('.ptabs [data-tab="Calls"]'); if(tab) tab.click();
   var list = p.querySelector('.plist.calls'), body = p.querySelector('.pbody');
   var rows = list ? [].slice.call(list.querySelectorAll(':scope > .call')) : [];
   var filter = p.querySelector('.cbfilter'), first = rows[0] || null, on = p.querySelector('.cbfilter .on');
@@ -111,44 +113,62 @@ BACK_TO_TRANSCRIPT_JS = r"""
 """
 
 # --- what the copy chip would actually put on the clipboard ---------------------------------------
+# copyText hands the text to navigator.clipboard.writeText (127.0.0.1 is a secure context); stub that.
 COPY_JS = r"""
 (function(){
-  var out = {}, orig = window.copyText;
-  window.copyText = function(text, done){ window.__payload = text; if(done) done(true); };
+  var out = {}, clip = navigator.clipboard, orig = clip.writeText;
+  clip.writeText = function(text){ window.__payload = text; return Promise.resolve(); };
   [].slice.call(document.querySelectorAll('#panel .ids .idc')).forEach(function(b){
     window.__payload = null;
     b.click();
     out[b.getAttribute('data-k')] = window.__payload;
   });
-  window.copyText = orig;
+  clip.writeText = orig;
   return JSON.stringify(out);
 })()
 """
 
 # --- a line that just arrived: animated once, and not replayed by the next poll -------------------
+# The React page has no handle on its own state, so the line arrives the way it does in life: through the poll.
+# The page's fetch is wrapped so every card.json answer carries one more transcript line on the unit's session
+# node (the wrapper stays on, so the line keeps arriving in each poll's answer, as a real one would).
 ARRIVE_JS = r"""
 (function(){
-  var n = (typeof getSelectedNode === 'function') ? getSelectedNode() : null;
-  if(!n) return JSON.stringify({err:'no selected node'});
-  var u = unitOf(n), src = (u && (u.session || u.run)) || n;
-  var ts = Math.floor(Date.now() / 1000) + 60;
-  src.text = (src.text || []).concat([{ts: ts, text: 'PROOF arrival line'}]);
-  updatePanel();
-  var first = document.querySelector('#panel .plist.transcript > .msg');
-  return JSON.stringify({once: !!(first && first.classList.contains('new')),
-                         text: first ? first.textContent.slice(0, 60) : '',
-                         newCount: document.querySelectorAll('#panel .plist.transcript > .msg.new').length});
+  var primary = decodeURIComponent((location.hash.match(/node=([^&]+)/) || [])[1] || '');
+  window.__arr = [];
+  window.__ts = Math.floor(Date.now() / 1000) + 60;
+  var orig = window.fetch;
+  window.fetch = function(u, i){
+    var p = orig.call(this, u, i);
+    if(!/\/card\/[^?]*\.json/.test(String(u))) return p;
+    return p.then(function(r){ return r.clone().json().then(function(d){
+      var nodes = d.nodes || [], n = nodes.filter(function(x){ return x.id === primary; })[0];
+      var sess = n && n.kind === 'run' ? nodes.filter(function(x){ return x.kind === 'session' && x.run_id === (n.evidence || {}).run_id; })[0] : n;
+      var src = sess || n;
+      if(src) src.text = (src.text || []).concat([{ts: window.__ts, text: 'PROOF arrival line'}]);
+      return new Response(JSON.stringify(d), {status: r.status, headers: r.headers});
+    }); });
+  };
+  new MutationObserver(function(ms){ ms.forEach(function(m){ m.addedNodes.forEach(function(n){
+    if(n.nodeType !== 1) return;
+    [n].concat([].slice.call(n.querySelectorAll ? n.querySelectorAll('.msg') : [])).forEach(function(x){
+      if(x.classList && x.classList.contains('msg') && x.textContent.indexOf('PROOF arrival line') >= 0)
+        window.__arr.push({once: x.classList.contains('new'), first: x === x.parentNode.firstElementChild});
+    });
+  }); }); }).observe(document.body, {childList: true, subtree: true});
+  return 'armed';
 })()
 """
-REPLAY_JS = r"""
+ARRIVED_JS = r"""
 (function(){
-  updatePanel();
-  return JSON.stringify({newCount: document.querySelectorAll('#panel .plist.transcript > .msg.new').length});
+  var rows = [].slice.call(document.querySelectorAll('#panel .plist.transcript > .msg'));
+  return JSON.stringify({arrivals: window.__arr, newCount: document.querySelectorAll('#panel .plist.transcript > .msg.new').length,
+                         text: rows[0] ? rows[0].textContent.slice(0, 60) : ''});
 })()
 """
 
-# --- redraw in place: scroll offset and an in-progress selection must survive --------------------
-KEEP_JS = r"""
+# --- redraw in place: scroll offset and an in-progress selection must survive a real poll ----------
+KEEP_SET_JS = r"""
 (function(){
   var p = document.getElementById('panel'), body = p.querySelector('.pbody');
   var line = p.querySelector('.plist.transcript > .msg p');
@@ -160,33 +180,47 @@ KEEP_JS = r"""
     var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
   }
   body.scrollTop = Math.min(120, Math.max(0, body.scrollHeight - body.clientHeight));
-  var want = body.scrollTop;
-  updatePanel();
-  var sel = String(window.getSelection() || '');
-  return JSON.stringify({want: want, got: body.scrollTop, sel: sel.length, selText: sel.slice(0, 20)});
+  window.__want = body.scrollTop;
+  return window.__want;
 })()
 """
-KEEP_CALLS_JS = r"""
+KEEP_READ_JS = r"""
 (function(){
-  var p = document.getElementById('panel'), body = p.querySelector('.pbody');
+  var body = document.getElementById('panel').querySelector('.pbody');
+  var sel = String(window.getSelection() || '');
+  return JSON.stringify({want: window.__want, got: body.scrollTop, sel: sel.length, selText: sel.slice(0, 20)});
+})()
+"""
+KEEP_CALLS_SET_JS = r"""
+(function(){
+  var body = document.getElementById('panel').querySelector('.pbody');
   body.scrollTop = Math.min(60, Math.max(0, body.scrollHeight - body.clientHeight));
-  var want = body.scrollTop;
-  updatePanel();
-  return JSON.stringify({want: want, got: body.scrollTop});
+  window.__wantc = body.scrollTop;
+  return window.__wantc;
+})()
+"""
+KEEP_CALLS_READ_JS = r"""
+(function(){
+  var body = document.getElementById('panel').querySelector('.pbody');
+  return JSON.stringify({want: window.__wantc, got: body.scrollTop});
 })()
 """
 # --- the other half of the run/session unit opens the same panel ---------------------------------
+# The panel was opened for the node in #node=; the unit highlights both halves; clicking the other half must
+# show the same panel (header text), and the first half again puts it back.
 PARTNER_JS = r"""
 (function(){
-  var n = getSelectedNode(), u = unitOf(n);
-  var other = (u && u.run && u.session) ? (n.id === u.run.id ? u.session.id : u.run.id) : null;
+  var primary = decodeURIComponent((location.hash.match(/node=([^&]+)/) || [])[1] || '');
+  var sels = [].slice.call(document.querySelectorAll('.node.sel'));
   var before = (document.querySelector('#panel .pt')||{}).textContent || '';
+  var other = sels.filter(function(e){ return e.getAttribute('data-id') !== primary; })[0];
   if(!other) return JSON.stringify({other: null, before: before});
-  selectNode(other);
+  var click = function(e){ e.querySelector('.card').dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true})); };
+  click(other);
   var after = (document.querySelector('#panel .pt')||{}).textContent || '';
-  var sel = document.querySelectorAll('#nodes .node.sel').length;
-  selectNode(n.id);
-  return JSON.stringify({other: other, before: before, after: after, sel: sel});
+  var sel = document.querySelectorAll('.node.sel').length;
+  var back = document.querySelector('.node[data-id="' + primary + '"]'); if(back) click(back);
+  return JSON.stringify({other: other.getAttribute('data-id'), before: before, after: after, sel: sel});
 })()
 """
 
@@ -239,7 +273,7 @@ def pick_card_and_node():
     return best or fallback or (None, None)
 
 
-def wait_for_target(fragment, tries=40):
+def wait_for_target(fragment, tries=80):
     for _ in range(tries):
         try:
             with urllib.request.urlopen("http://127.0.0.1:%d/json/list" % PORT, timeout=10) as fh:
@@ -298,7 +332,7 @@ def main():
     if failed_n is None:
         failed_n = len([s for s in steps if s.get("state") == "err"])
 
-    profile = tempfile.mkdtemp(prefix="crew-panel-proof-")
+    profile = crew_proof_board.chrome_scratch("crew-panel-proof-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox",
          "--remote-debugging-port=%d" % PORT, "--user-data-dir=" + profile,
@@ -325,8 +359,7 @@ def main():
             state = json.loads(ws.evaluate(JS) or "{}")
             if not check("the panel opens", state.get("panel")):
                 return 1
-            ws.evaluate("(function(){if(typeof drawAll==='function') drawAll();})()")
-            time.sleep(0.4)
+            time.sleep(2.6)                      # a poll or two: the page redraws in place and must stay quiet
             errs = str(ws.evaluate("JSON.stringify(window.__jserr||[])"))
             check("the panel renders without a script error", errs in ("[]", "", "None"), errs[:140])
             if errs not in ("[]", "", "None"):
@@ -376,18 +409,24 @@ def main():
                       "node carries no text (nothing to order)")
 
             # 2. arrival animation, once, never replayed by the poll
-            arrive = json.loads(ws.evaluate(ARRIVE_JS) or "{}")
+            ws.evaluate(ARRIVE_JS)
+            time.sleep(3.0)                      # the page's own 2 s poll brings the line in
+            arrive = json.loads(ws.evaluate(ARRIVED_JS) or "{}")
+            first = (arrive.get("arrivals") or [{}])[0]
             check("a newly arrived line is animated once",
-                  arrive.get("once") is True and arrive.get("newCount") == 1,
-                  "first row carries .new: %s (count %s)"
-                  % (arrive.get("once"), arrive.get("newCount")))
-            time.sleep(0.6)                      # the class removes itself after 420 ms
-            replay = json.loads(ws.evaluate(REPLAY_JS) or "{}")
+                  first.get("once") is True and first.get("first") is True,
+                  "arrived at the top: %s, carried .new on arrival: %s (%d arrival(s))"
+                  % (first.get("first"), first.get("once"), len(arrive.get("arrivals") or [])))
+            time.sleep(2.6)                      # the class removes itself after 420 ms; a further poll must not replay it
+            replay = json.loads(ws.evaluate(ARRIVED_JS) or "{}")
             check("the next poll does not replay the animation",
-                  replay.get("newCount") == 0, "new rows after a redraw: %s" % replay.get("newCount"))
+                  replay.get("newCount") == 0 and len(replay.get("arrivals") or []) == 1,
+                  "new rows after a poll: %s, arrivals: %d" % (replay.get("newCount"), len(replay.get("arrivals") or [])))
 
             # 6. scroll + selection survive a redraw
-            keep = json.loads(ws.evaluate(KEEP_JS) or "{}")
+            ws.evaluate(KEEP_SET_JS)
+            time.sleep(2.6)                      # a real poll redraws the panel
+            keep = json.loads(ws.evaluate(KEEP_READ_JS) or "{}")
             check("a redraw keeps the scroll offset",
                   abs((keep.get("got") or 0) - (keep.get("want") or 0)) <= 2,
                   "want=%s got=%s" % (keep.get("want"), keep.get("got")))
@@ -395,6 +434,8 @@ def main():
                   (keep.get("sel") or 0) > 0 or not text, "selection=%r" % keep.get("selText"))
 
             # 5. the Calls tab: one bounded box, the filter on top, all folded, newest first
+            ws.evaluate(CALLS_CLICK_JS)
+            time.sleep(0.4)                      # React draws the tab on its next tick, not inside the click
             calls = json.loads(ws.evaluate(CALLS_JS) or "{}")
             view = "failed" if failed_n > 0 else "latest"
             picked = [st for st in steps if st.get("state") == "err"] if view == "failed" else steps[-6:]
@@ -425,7 +466,9 @@ def main():
             else:
                 check("the calls list reads newest-first, like the transcript", True,
                       "fewer than two call groups in this view (nothing to order)")
-            keepc = json.loads(ws.evaluate(KEEP_CALLS_JS) or "{}")
+            ws.evaluate(KEEP_CALLS_SET_JS)
+            time.sleep(2.6)
+            keepc = json.loads(ws.evaluate(KEEP_CALLS_READ_JS) or "{}")
             check("a redraw keeps the reader's scroll inside the calls box",
                   abs((keepc.get("got") or 0) - (keepc.get("want") or 0)) <= 2,
                   "want=%s got=%s" % (keepc.get("want"), keepc.get("got")))

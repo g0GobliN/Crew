@@ -17,9 +17,8 @@ Outputs:
   terminal   unicode box nodes in layered rows, ANSI colour only when stdout is
              a tty; --watch SECONDS re-renders in place with a cursor-home escape
   --json     machine-readable JSON
-  --html     one self-contained HTML file (inline SVG + inline JS + the crew_dashboard CSS/JS;
-             the page inherits the host colours through tokens.css)
-             that polls the JSON file written next to it every 2 seconds
+  --html     one self-contained HTML file: the dashboard app (crew_dashboard/app.js, inlined) showing a
+             snapshot of the card, embedded in the file; it opens from disk and does not poll
 """
 
 import argparse
@@ -51,16 +50,6 @@ ANSI = {
     "failed": "\x1b[1;31m",
     "reset": "\x1b[0m",
 }
-
-# Status colours for the --html page are tokens, not hex: crew_dashboard/tokens.css decides them.
-HTML_COLOURS = {
-    "running": "var(--crew-tone-running)",
-    "done": "var(--crew-tone-done)",
-    "blocked": "var(--crew-tone-blocked)",
-    "failed": "var(--crew-tone-blocked)",
-    "pending": "var(--crew-tone-neutral)",
-}
-
 
 # ----------------------------------------------------------------- path helpers
 
@@ -481,13 +470,29 @@ def _say_text(content, limit=240):
     return " ".join(str(content or "").split())[:limit]
 
 
+def _say_raw(content, limit=20000):
+    """The same words with their line breaks kept (trailing blanks trimmed, runs of blank lines folded to one).
+
+    `_say_text` flattens for the browser's one-line `.msg p`; a markdown renderer (Hermes Desktop) needs the
+    newlines or a list and a code fence arrive as one run-on line. Carried beside `text` as `raw`.
+    """
+    lines = [ln.rstrip() for ln in str(content or "").replace("\r\n", "\n").replace("\r", "\n").strip().split("\n")]
+    out = []
+    for ln in lines:
+        if not ln and out and not out[-1]:
+            continue
+        out.append(ln)
+    return "\n".join(out)[:limit]
+
+
 def load_session_text(db, session_id, max_lines=400, max_chars=20000):
     """What the model itself wrote in a session - tool calls and tool results filtered out.
 
     Owner, 2026-09-30: a step box answers "which tool ran"; the worker box in the panel has to answer
     "what did the model say", live. So this reads only role='assistant' messages that carry text of their
     own: a message that exists to call a tool (content empty) and every role='tool' result are dropped on
-    purpose. Returns [{"ts", "text"}] oldest first, capped to the tail so the 2s panel poll stays light.
+    purpose. Returns [{"ts", "text"[, "raw"]}] oldest first (`raw` = the text with its newlines, only when it has
+    any and so differs from the flat `text`; Desktop's markdown renderer reads it), capped to the tail so the 2s panel poll stays light.
     """
     if not db or not session_id:
         return []
@@ -497,7 +502,11 @@ def load_session_text(db, session_id, max_lines=400, max_chars=20000):
     for content, ts in rows:
         text = _say_text(content, limit=max_chars)
         if text:
-            out.append({"ts": ts, "text": text})
+            rec = {"ts": ts, "text": text}
+            raw = _say_raw(content, limit=max_chars)
+            if raw != text:
+                rec["raw"] = raw
+            out.append(rec)
     out = out[-max_lines:]
     while out and sum(len(r["text"]) for r in out) > max_chars:
         out.pop(0)
@@ -599,15 +608,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DASH_DIR = os.path.join(HERE, "crew_dashboard")
 
 
-def dashboard_asset(*names):
-    """The dashboard CSS/JS files joined, for the page to inline: one self-contained document."""
-    out = []
-    for name in names:
-        with open(os.path.join(DASH_DIR, name), encoding="utf-8") as fh:
-            out.append(fh.read())
-    return "\n".join(out)
-
-
 def favicon_link():
     """The tab icon as an inline <link>: the logo mark on a dark tile, shipped beside the CSS and embedded
     like it, so the page stays one self-contained document. The tile keeps the dashboard's tab apart from
@@ -619,21 +619,6 @@ def favicon_link():
     except OSError:
         return ""
     return '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,%s">' % data
-
-
-def logo_link():
-    """The header mark as a link home: the logo mark with no background (mark.svg), embedded
-    like the CSS so the page stays one self-contained document, pointing at the overview (/). The SVG
-    carries the mark for a dark and a light page (dev/make_favicon.py), so the black ring of the
-    on-light variant never disappears into a dark host background. A missing file costs the mark,
-    never the page."""
-    try:
-        with open(os.path.join(DASH_DIR, "mark.svg"), "rb") as fh:
-            data = base64.b64encode(fh.read()).decode("ascii")
-    except OSError:
-        return ""
-    return ('<a class="brand" href="/" title="overview" aria-label="crew overview">'
-            '<img src="data:image/svg+xml;base64,%s" alt="" width="26" height="26"></a>' % data)
 
 
 def profile_homes():
@@ -1114,7 +1099,18 @@ def build_situation(db, card_id, card_row, root_ev, runs):
         "tokens": {"spent": root_ev.get("spent") or 0, "ceiling": root_ev.get("ceiling") or 0},
         "units": load_progress_units(card_id),
         "first_pass": load_first_pass(card_id),
+        "proof_ask": proof_ask_kind(card_id),
     }
+
+
+def proof_ask_kind(card_id):
+    """The kind of proof question waiting for the owner ("blocked" = Hermes flagged the command, "rescope" = a new
+    command is proposed), "" when none. The Desktop Proof button is enabled by it (crew_card.pending_proof_ask)."""
+    try:
+        ask = crew_card.pending_proof_ask(card_id)
+    except Exception:
+        return ""
+    return str(ask.get("kind") or "ask") if isinstance(ask, dict) else ""
 
 
 ROUTE_KINDS = ("route", "reroute", "quota_wall")
@@ -2126,155 +2122,18 @@ def _js_safe(s):
     return s.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
-def _tok_fields(tok):
-    """Exact figures for the rail token block: thousands separators, never k/M."""
-    tok = tok or {}
-    return {"tok_ceiling": format(int(tok.get("ceiling") or 0), ","),
-            "tok_used": format(int(tok.get("used") or 0), ","),
-            "tok_raw": format(int(tok.get("raw_total") or 0), ","),
-            "tok_calls": format(int(tok.get("calls") or 0), ","),
-            "tok_pct": "%.1f%%" % float(tok.get("pct") or 0.0)}
-
-
-def _brief_fields(graph):
-    """The brief block in the rail: the exact words the coordinator was given, never re-worded."""
-    brief = None
-    for n in graph.get("nodes") or []:
-        if n.get("kind") == "brief":
-            brief = n.get("brief") or {}
-            break
-    if not brief or not (brief.get("text") or "").strip():
-        return {"brief_text": "", "brief_src": "", "brief_hidden": "hidden"}
-    src = brief.get("source") or "owner"
-    when = fmt_ts(brief.get("ts")) if brief.get("ts") else ""
-    if src == "owner":
-        label = "the owner's words when /crew was called"
-    elif src == "card goal":
-        label = "the card's own GOAL line - no brief was recorded"
-    else:
-        label = "source: %s" % src
-    return {"brief_text": _html.escape(brief["text"].strip()),
-            "brief_src": _html.escape("%s%s%s" % (label, " - " if when else "", when)),
-            "brief_hidden": ""}
-
-
-def render_html(graph, json_filename, nonce=None):
-    # nonce: the serving process's per-response CSP nonce, set on every inline <script>; a standalone
-    # --html file has no CSP and passes none.
-    initial = _js_safe(graph)
+def render_html(graph):
+    """One self-contained HTML file for `--html`: the dashboard app (crew_dashboard/app.js, inlined) showing a
+    snapshot of this card's graph, embedded as window.__CREW_SNAPSHOT. The file opens from disk with no server;
+    it does not poll, so it shows the card as it was when the file was written."""
+    with open(os.path.join(DASH_DIR, "app.js"), encoding="utf-8") as fh:
+        app = fh.read().replace("</script", "<\\/script")
     card_id = graph.get("card_id") or ""
-    title = _html.escape("crew graph - " + card_id)
-
-    css = dashboard_asset("tokens.css", "crew.css")
-    # fill card.js's placeholders before the asset is embedded, the card data last, so nothing a card
-    # carries is ever scanned for a placeholder (placeholders are plain identifiers, so the asset stays
-    # valid JavaScript for linters and code scanning)
-    js = dashboard_asset("lib.js", "card.js")
-    js = js.replace("__CREW_JSON_NAME__", _js_safe(json_filename))
-    js = js.replace("__CREW_COLOURS__", json.dumps(HTML_COLOURS))
-    js = js.replace("__CREW_INITIAL__", initial)
-
-    html_doc = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title>
-{favicon}
-<style>{css}</style>
-</head>
-<body class="page-card" data-card="{card_attr}">
-{brand}
-<div id="event"></div>
-<div id="main">
-  <div id="toparea">
-    <div class="tcell" id="topSit">
-      <div class="tch">card</div>
-      <div id="sit" class="sit"></div>
-      <div id="sitfields" class="fields"></div>
-    </div>
-    <div class="tcell" id="topWhy">
-      <div class="tch" id="whyHead">pending reason</div>
-      <div class="tce" id="sitboxNone">nothing pending</div>
-      <div id="sitbox" hidden>
-        <div id="sitboxHead"><span class="sbl"></span><span class="sb"></span><button id="sitCopy" class="copy" type="button" title="copy the pending reason">copy</button></div>
-        <div id="sitboxWhy"></div>
-        <div id="sitboxMeta"></div>
-      </div>
-    </div>
-    <div class="tcell" id="topSpin">
-      <div class="tch">repeated stops</div>
-      <div class="tce" id="spinboxNone">not spinning</div>
-      <div id="spinbox" hidden>
-        <div id="spinboxHead"><span id="spinboxCount"></span><span class="sbl">spinning</span><button id="spinCopy" class="copy" type="button" title="copy the repeated reason">copy</button></div>
-        <div id="spinboxText"></div>
-      </div>
-    </div>
-  </div>
-  <!-- the role filters as one horizontal strip under the top boxes (owner, 2026-10-01): click a role to
-       focus its nodes, "all roles" or esc for everything; each role carries its last message, which
-       opens that lane's newest step -->
-  <div id="rolestrip"><div id="roster"></div></div>
-  <div id="row">
-  <div id="rail">
-    <div id="toksec">
-      <div class="rh">tokens</div>
-      <div class="tokrow" id="tokCeiling"><span class="tk">ceiling</span><span class="tv">{tok_ceiling}</span></div>
-      <div class="tokrow" id="tokUsed"><span class="tk">used (billed)</span><span class="tv">{tok_used}</span></div>
-      <div class="tokrow" id="tokRaw"><span class="tk">raw total</span><span class="tv">{tok_raw}</span></div>
-      <div class="tokrow" id="tokCalls"><span class="tk">api calls</span><span class="tv">{tok_calls}</span></div>
-      <div class="tokrow" id="tokPct"><span class="tk">of ceiling</span><span class="tv">{tok_pct}</span></div>
-    </div>
-    <div id="briefsec" {brief_hidden}>
-      <div class="rh">brief</div>
-      <div id="briefText">{brief_text}</div>
-      <div id="briefSrc">{brief_src}</div>
-    </div>
-    <div class="rback"><a class="railbtn" href="/" title="back to the board">\u2039<span class="rbtnlabel"> board</span></a></div>
-    <div class="rbot">
-      <button class="railbtn tog" id="railBot" title="collapse the sidebar">\u2039</button>
-    </div>
-  </div>
-  <div id="stage"><div id="world"><svg id="edges"></svg><div id="nodes"></div></div>
-    <canvas id="minimap" width="200" height="130"></canvas><div id="zoomlbl"></div></div>
-  <div id="panel"></div>
-  </div>
-</div>
-<div id="scrubwrap"><div id="scrubber"></div></div>
-<div id="statusbar">
-  <span class="pill">crew</span>
-  <span class="live" id="live">LIVE</span>
-  <span class="cardtitle" id="cardtitle"></span>
-  <span class="pill" id="ractive"></span>
-  <span class="pill btn" id="followbtn">follow off</span>
-  <span class="meta">
-    <span id="counts"></span>
-    <a href="/">overview</a>
-    <span class="hints">space pause - r refresh - f or double-click fit - 0 zoom - F follow - ? help - o overview</span>
-  </span>
-</div>
-<div id="help">
-  <div class="h">keys</div>
-  <div class="row"><kbd>space</kbd>pause / resume polling</div>
-  <div class="row"><kbd>r</kbd>refresh once</div>
-  <div class="row"><kbd>f</kbd>fit view</div>
-  <div class="row"><kbd>0</kbd>reset zoom</div>
-  <div class="row"><kbd>F</kbd>follow the newest active node</div>
-  <div class="row"><kbd>wheel</kbd>zoom - <kbd>drag</kbd>pan - zoomed out, cards become status blocks</div>
-  <div class="row"><kbd>?</kbd>toggle this help</div>
-  <div class="row"><kbd>o</kbd>open overview</div>
-  <div class="row"><kbd>esc</kbd>close help, clear role focus</div>
-</div>
-<script{nonce_attr}>
-{js}
-</script>
-</body>
-</html>
-""".format(title=title, card_attr=_html.escape(card_id, quote=True), favicon=favicon_link(), brand=logo_link(), css=css, js=js,
-               nonce_attr=(' nonce="%s"' % _html.escape(nonce, quote=True)) if nonce else "", **_tok_fields(graph.get("tokens")),
-               **_brief_fields(graph))
-
-    return html_doc
+    return ('<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            '<title>%s</title>\n%s\n</head>\n<body>\n<div id="crew-app"></div>\n'
+            '<script>window.__CREW_SNAPSHOT=%s;</script>\n<script>\n%s\n</script>\n</body>\n</html>\n'
+            % (_html.escape("crew graph - " + card_id), favicon_link(), _js_safe(graph), app))
 
 
 # ----------------------------------------------------------------- main
@@ -2343,18 +2202,13 @@ def main(argv=None):
         html_path = (os.path.join(outdir, args.html) if args.html
                      else _default_path(outdir, graph["card_id"], ".graph.html"))
         html_path = os.path.abspath(html_path)
-        json_path = os.path.splitext(html_path)[0] + ".json"
-        json_name = os.path.basename(json_path)
         try:
-            with open(json_path, "w", encoding="utf-8") as fh:
-                fh.write(render_json(graph))
             with open(html_path, "w", encoding="utf-8") as fh:
-                fh.write(render_html(graph, json_name))
+                fh.write(render_html(graph))
         except Exception as exc:
             print("could not write HTML: %s" % exc)
             return 2
         print("HTML: %s" % html_path)
-        print("JSON: %s" % json_path)
         print("nodes=%d edges=%d" % (graph["node_count"], graph["edge_count"]))
         return 0
 

@@ -135,26 +135,23 @@ def main():
               bool(gb) and (gb.get("brief") or {}).get("source") == "card goal",
               (gb or {}).get("brief", {}).get("source"))
 
-        # the sidebar carries the same brief, in full
-        with urllib.request.urlopen("%s/card/%s" % (BASE, WITH_BRIEF), timeout=20) as fh:
-            page = fh.read().decode("utf-8", "replace")
+        # the sidebar carries the same brief, in full (read from the DOM headless Chrome draws: the page is the React app)
         import html as _h
+        page = _h.unescape(crew_proof_board.render_dom("%s/card/%s" % (BASE, WITH_BRIEF)))
         block = page.split('id="briefsec"', 1)[-1].split("</div>", 3)
         body = block[0] if block else ""
         check("the sidebar carries the brief block", 'id="briefText"' in page and "hidden" not in body[:40],
               body[:60])
         check("the sidebar shows the owner's words in full",
-              _h.escape(OWNER_WORDS) in page, OWNER_WORDS[:40])
+              OWNER_WORDS in page, OWNER_WORDS[:40])
         check("the sidebar names the brief's source",
-              "the owner&#x27;s words" in page or "the owner's words" in page)
+              "the owner's words" in page)
 
-        with urllib.request.urlopen("%s/card/%s" % (BASE, GOAL_ONLY), timeout=20) as fh:
-            goal_page = fh.read().decode("utf-8", "replace")
+        goal_page = _h.unescape(crew_proof_board.render_dom("%s/card/%s" % (BASE, GOAL_ONLY)))
         check("the sidebar marks a fallback brief as the GOAL line",
               "GOAL line" in goal_page and "no brief was recorded" in goal_page)
 
-        with urllib.request.urlopen("%s/card/%s" % (BASE, BARE), timeout=20) as fh:
-            bare_page = fh.read().decode("utf-8", "replace")
+        bare_page = crew_proof_board.render_dom("%s/card/%s" % (BASE, BARE))
         bare_block = bare_page.split('id="briefsec"', 1)[-1][:40]
         check("a card with no brief hides the sidebar block", "hidden" in bare_block, bare_block[:40])
 

@@ -30,6 +30,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crew_card  # noqa: E402 - the owner profile, the base home and the package checkout
+from crew_proof_host import Host  # noqa: E402
 PKG = crew_card.package_dir() or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROFILE = os.environ.get("CREW_PROFILE") or crew_card.owner_home()
 PROFILES_ROOT = os.environ.get("CREW_PROFILES_ROOT") or os.path.join(crew_card.base_home(), "profiles")
@@ -61,20 +62,6 @@ def load(path, name):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
-
-class Host:
-    def __init__(self):
-        self.commands, self.skills, self.hooks = {}, [], []
-
-    def register_command(self, name, handler, description="", args_hint="", **kw):
-        self.commands[name] = handler
-
-    def register_skill(self, name, path, description="", frontmatter=None, **kw):
-        self.skills.append(name)
-
-    def register_hook(self, name, fn):
-        self.hooks.append(name)
 
 
 def seed_board(path):
@@ -198,7 +185,7 @@ def main():
     check("the skill names the acting passes it must not run",
           all(word in src for word in ("/crew-stop", "crew_coordinator.py")))
     check("the skill names the reader it runs",
-          "$HERMES_HOME/plugins/crew/scripts/crew-run.sh" in src and "crew_diagnose.py" in src)
+          "crew_diagnose(state=" in src and "crew-run.sh" not in src)
     check("the skill names every state the reader takes",
           all(state in src for state in ("blocked", "triage", "todo", "ready", "running", "done",
                                          "archived")))

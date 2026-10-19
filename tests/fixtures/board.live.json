@@ -1,0 +1,433 @@
+{
+ "generated_at": 1792349804,
+ "node": "testbox",
+ "live": 0,
+ "lanes": [
+  {
+   "key": "blocked",
+   "label": "Needs you",
+   "tiles": [],
+   "hidden": 0
+  },
+  {
+   "key": "running",
+   "label": "Working",
+   "tiles": [],
+   "hidden": 0
+  },
+  {
+   "key": "review",
+   "label": "In review",
+   "tiles": [],
+   "hidden": 0
+  },
+  {
+   "key": "queued",
+   "label": "Queued",
+   "tiles": [],
+   "hidden": 0
+  },
+  {
+   "key": "done",
+   "label": "Done",
+   "tiles": [
+    {
+     "id": "t_962dc51e",
+     "title": "Example app: SDK 54 -> 58 upgrade (clear 51 HIGH npm advisories)",
+     "status": "done",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 195856,
+     "settled_s": 194424,
+     "last_outcome": "completed",
+     "summary": "Example app reached the new framework version on a feature branch, one commit per step plus fix commits (6 total, nothing pushed, nothing merged). Every step was gated green on typecheck, lint, tests and export. The page is a single self-contained file with no external assets or build step. A proof ",
+     "verdict": null
+    },
+    {
+     "id": "t_b417441b",
+     "title": "Security: non-breaking npm audit fixes across all products (from security report 2026-10-16)",
+     "status": "done",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 198491,
+     "settled_s": 196490,
+     "last_outcome": "completed",
+     "summary": "Finished the dependency audit pass one repo at a time: critical and high findings dropped sharply, none critical left, several commits on a fix branch (nothing pushed), a few killed-run edits reverted. Every directory has a line in the audit log with its before and after. The page is a single self-c",
+     "verdict": null
+    },
+    {
+     "id": "t_7473c177",
+     "title": "Top 5 city guides 2026 - single-file ranked page",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 2,
+     "active": null,
+     "age_s": 1217110,
+     "settled_s": 1216518,
+     "last_outcome": "completed",
+     "summary": "Reviewed and approved. The single-file index.html renders 5 ranked 2026 city guides, each with a visible citation (outlet + URL); the ranking matches the cited source (verified independently against it), and the page is fully self-contained with zero external requests. The page is a single self-cont",
+     "verdict": "PASS",
+     "budget": {
+      "used": 258664,
+      "ceiling": 1500000,
+      "pct": 17.2
+     }
+    },
+    {
+     "id": "t_d365d506",
+     "title": "Tool comparison site",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "content",
+     "color": "#f778ba",
+     "runs": 5,
+     "active": null,
+     "age_s": 1312016,
+     "settled_s": 1309851,
+     "last_outcome": "completed",
+     "summary": "Verifier round 2: PASS (proof rc=0, \"ALL CHECKS PASSED\", verdict recorded). Round 1 defect fixed: the comparison table now shows a visible 1-5 score pill in every dimension cell, and each row's five scores sum exactly to its total. The page is a single self-contained file with no external assets or ",
+     "verdict": "PASS",
+     "budget": {
+      "used": 978145,
+      "ceiling": 1500000,
+      "pct": 65.2
+     }
+    },
+    {
+     "id": "t_6a7c3296",
+     "title": "Product roundup 2026 landing page (6-item one-screen roundup)",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 3,
+     "active": null,
+     "age_s": 1318144,
+     "settled_s": 1317325,
+     "last_outcome": "completed",
+     "summary": "Verified the product roundup landing page as crew-verifier. Wrote the card's proof script and ran the proof through the verdict tool: rc=0, PASS, verdict recorded under the crew verdicts folder. The page is a single self-contained file with no external assets or build step. A proof script renders it",
+     "verdict": "PASS",
+     "budget": {
+      "used": 539745,
+      "ceiling": 1500000,
+      "pct": 36.0
+     }
+    },
+    {
+     "id": "t_d4bba221",
+     "title": "audit follow-up: Example topic explainer landing page",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1332493,
+     "settled_s": 1332283,
+     "last_outcome": "completed",
+     "summary": "Audit follow-up on t_d3c396cd: the proof failed because verify.py imported a third-party package that is absent in the proof-runner's Python. Rewrote the transport in verify.py as a minimal stdlib client, no third-party imports at all. The page is a single self-contained file with no external assets",
+     "verdict": "PASS",
+     "budget": {
+      "used": 74241,
+      "ceiling": 500000,
+      "pct": 14.8
+     }
+    },
+    {
+     "id": "t_d3c396cd",
+     "title": "Example topic explainer landing page",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1332723,
+     "settled_s": 1332523,
+     "last_outcome": "completed",
+     "summary": "Shipped a self-contained example-topic explainer landing page at /home/user/projects/example-site/index.html (plain HTML/CSS/JS, no external assets or build step) with hero, what-is, 3 use-cases, 4 risks, 3 FAQ items and a sources footer, plus verify.py which renders it in headless Chrome and checks",
+     "verdict": "FAIL",
+     "budget": {
+      "used": 64599,
+      "ceiling": 500000,
+      "pct": 12.9
+     }
+    },
+    {
+     "id": "t_ec148a2b",
+     "title": "v3 example product landing: static publish package + SEO layer",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1533098,
+     "settled_s": 1532917,
+     "last_outcome": "completed",
+     "summary": "Shipped the v3 example product landing as a static publish package. dist/ contains exactly index.html (root), assets/logo.png, robots.txt, sitemap.xml; the head is indexable with a canonical URL and full social meta. The page is a single self-contained file with no external assets or build step. A p",
+     "verdict": "PASS",
+     "budget": {
+      "used": 99802,
+      "ceiling": 500000,
+      "pct": 20.0
+     }
+    }
+   ],
+   "hidden": 0
+  },
+  {
+   "key": "archived",
+   "label": "Archived",
+   "tiles": [
+    {
+     "id": "t_c9e643de",
+     "title": "crew tools live check (independent): write hello3.txt",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 2,
+     "active": null,
+     "age_s": 6749,
+     "settled_s": 6591,
+     "last_outcome": "completed",
+     "summary": "Verified: /tmp/crew-demo/hello3.txt contains exactly \"crew tools live\". Proof command `test \\\"$(cat /tmp/crew-demo/hello3.txt)\\\" = \\\"crew tools live\\\"` returned PASS (rc=0, verdict logged in crew/verdicts/t_c9e643de.jsonl).",
+     "verdict": "PASS",
+     "budget": {
+      "used": 72124,
+      "ceiling": 1500000,
+      "pct": 4.8
+     }
+    },
+    {
+     "id": "t_20f88c0e",
+     "title": "crew tools live check (proof): write hello2.txt",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 6757,
+     "settled_s": 6722,
+     "last_outcome": "completed",
+     "summary": "Wrote /tmp/crew-demo/hello2.txt containing exactly \"crew tools live\". Proof command `test \\\"$(cat /tmp/crew-demo/hello2.txt)\\\" = \\\"crew tools live\\\"` passed with PASS verdict.",
+     "verdict": "PASS",
+     "budget": {
+      "used": 42602,
+      "ceiling": 1500000,
+      "pct": 2.8
+     }
+    },
+    {
+     "id": "t_e4276ef6",
+     "title": "crew tools live check: write hello.txt",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 2,
+     "active": null,
+     "age_s": 7178,
+     "settled_s": 7068,
+     "last_outcome": "completed",
+     "summary": "Wrote /tmp/crew-demo/hello.txt containing exactly \"crew tools live\". Proof command test passed: file content matches expected line. Verifier verdict PASS (rc=0).",
+     "verdict": "PASS",
+     "budget": {
+      "used": 91841,
+      "ceiling": 1500000,
+      "pct": 6.1
+     }
+    },
+    {
+     "id": "t_68456696",
+     "title": "Example backend: move VM -> board a1 (needs USB stick + 64-bit OS)",
+     "status": "archived",
+     "test": false,
+     "assignee": "",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 0,
+     "active": null,
+     "age_s": 1106278,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "",
+     "verdict": null
+    },
+    {
+     "id": "t_9812d07f",
+     "title": "Top 5 city guides 2026 - webpage",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-content",
+     "role": "content",
+     "color": "#f778ba",
+     "runs": 1,
+     "active": null,
+     "age_s": 1224644,
+     "settled_s": 1224235,
+     "last_outcome": "blocked",
+     "summary": "stopped by owner (/crew-stop) - continue with /crew-unstuck t_9812d07f",
+     "verdict": "unverified",
+     "budget": {
+      "used": 179987,
+      "ceiling": 1500000,
+      "pct": 12.0
+     }
+    },
+    {
+     "id": "t_f70e8713",
+     "title": "City guides 2026 - one-page site",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1225938,
+     "settled_s": 1225888,
+     "last_outcome": "blocked",
+     "summary": "stopped by owner (/crew-stop) - continue with /crew-unstuck t_f70e8713",
+     "verdict": "unverified"
+    },
+    {
+     "id": "t_3f619c1d",
+     "title": "Example sector landing page",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "content",
+     "color": "#f778ba",
+     "runs": 5,
+     "active": null,
+     "age_s": 1322727,
+     "settled_s": 1320974,
+     "last_outcome": "reclaimed",
+     "summary": "task archived with run still active",
+     "verdict": "PASS",
+     "budget": {
+      "used": 1063681,
+      "ceiling": 1500000,
+      "pct": 70.9
+     }
+    }
+   ],
+   "hidden": 0
+  }
+ ],
+ "counts": {
+  "done": 8
+ },
+ "cards": 8,
+ "test_cards": 0,
+ "attention": {
+  "rows": [
+   {
+    "id": "t_962dc51e",
+    "status": "done",
+    "title": "Example app: SDK 54 -> 58 upgrade (clear 51 HIGH npm advisories)",
+    "who": "claude",
+    "age_s": 194424,
+    "entered_ts": 1792155380,
+    "ack_url": "/ack/t_962dc51e",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_b417441b",
+    "status": "done",
+    "title": "Security: non-breaking npm audit fixes across all products (from security report 2026-10-16)",
+    "who": "claude",
+    "age_s": 196490,
+    "entered_ts": 1792153314,
+    "ack_url": "/ack/t_b417441b",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_7473c177",
+    "status": "done",
+    "title": "Top 5 city guides 2026 - single-file ranked page",
+    "who": "crew-verifier",
+    "age_s": 1216518,
+    "entered_ts": 1791133286,
+    "ack_url": "/ack/t_7473c177",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_d365d506",
+    "status": "done",
+    "title": "Tool comparison site",
+    "who": "crew-verifier",
+    "age_s": 1309851,
+    "entered_ts": 1791039953,
+    "ack_url": "/ack/t_d365d506",
+    "color": "#f778ba"
+   },
+   {
+    "id": "t_6a7c3296",
+    "status": "done",
+    "title": "Product roundup 2026 landing page (6-item one-screen roundup)",
+    "who": "crew-verifier",
+    "age_s": 1317325,
+    "entered_ts": 1791032479,
+    "ack_url": "/ack/t_6a7c3296",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_d4bba221",
+    "status": "done",
+    "title": "audit follow-up: Example topic explainer landing page",
+    "who": "crew-worker",
+    "age_s": 1332283,
+    "entered_ts": 1791017521,
+    "ack_url": "/ack/t_d4bba221",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_d3c396cd",
+    "status": "done",
+    "title": "Example topic explainer landing page",
+    "who": "crew-worker",
+    "age_s": 1332523,
+    "entered_ts": 1791017281,
+    "ack_url": "/ack/t_d3c396cd",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_ec148a2b",
+    "status": "done",
+    "title": "v3 example product landing: static publish package + SEO layer",
+    "who": "crew-worker",
+    "age_s": 1532917,
+    "entered_ts": 1790816887,
+    "ack_url": "/ack/t_ec148a2b",
+    "color": "#58a6ff"
+   }
+  ],
+  "stuck": 0,
+  "done": 8,
+  "total": 8,
+  "ack_all": "/ack/all"
+ }
+}

@@ -120,6 +120,16 @@ class IntakeLine(GatewayHome):
         self.assertIn("The Hermes gateway is not running", ctx)
         self.assertIn("hermes gateway install", ctx)
 
+    def test_the_gateway_line_comes_before_the_last_line_link(self):
+        os.environ["CREW_DASHBOARD_URL"] = "https://crew.example.test"
+        try:
+            ctx = self.plugin().crew_intake_preload(user_message="/crew make it fast", session_id="GW3", turn_id="T", platform="desktop")["context"]
+        finally:
+            os.environ.pop("CREW_DASHBOARD_URL", None)
+        self.assertIn("The Hermes gateway is not running", ctx)
+        self.assertIn("Open it in Crew: the Crew entry in the sidebar, or preview it with Ctrl+J", ctx)
+        self.assertIn("before the last line", ctx)
+
     def test_no_line_when_the_gateway_runs(self):
         self.pid_file(str(os.getpid()))
         ctx = self.plugin().crew_intake_preload(user_message="/crew make it fast", session_id="GW2", turn_id="T")["context"]
@@ -155,13 +165,6 @@ class BoardField(GatewayHome):
         self.assertIn("hermes gateway", down["command"])
         self.pid_file(str(os.getpid()))
         self.assertTrue(json.loads(mod.board_json())["dispatcher"]["alive"])
-
-    def test_board_page_draws_the_strip(self):
-        serve = (REPO / "scripts" / "crew_graph_serve.py").read_text(encoding="utf-8")
-        js = (REPO / "scripts" / "crew_dashboard" / "board.js").read_text(encoding="utf-8")
-        self.assertIn("id=dispatcher-down", serve)
-        self.assertIn("drawDispatcher(d.dispatcher)", js)
-        self.assertIn("Cards will not start.", js)
 
 
 if __name__ == "__main__":

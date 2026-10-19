@@ -167,5 +167,52 @@ class RunnerTest(BoardCase):
         self.assertEqual(unguarded, [])
 
 
+class ChromeScratchCase(unittest.TestCase):
+
+    @unittest.skipUnless(os.name == "posix", "the AF_UNIX path limit is POSIX-only; Windows keeps its temp dir")
+    def test_long_tmpdir_gets_a_short_scratch_whose_socket_path_fits(self):
+        long_tmp = tempfile.mkdtemp(prefix="x")
+        deep = os.path.join(long_tmp, "profiles", "my-assistant-one", "cache", "scratch", "a" * 10)
+        os.makedirs(deep)
+        old = os.environ.get("TMPDIR")
+        tempfile.tempdir = None
+        os.environ["TMPDIR"] = deep
+        made = ""
+        try:
+            self.assertGreater(len(deep), 60)
+            made = pb.chrome_scratch("crew-dom-")
+            socket = os.path.join(made, "com.google.Chrome.JwI0pq", "SingletonSocket")
+            self.assertLess(len(socket), 107)
+            self.assertTrue(os.path.isdir(made))
+        finally:
+            if old is None:
+                os.environ.pop("TMPDIR", None)
+            else:
+                os.environ["TMPDIR"] = old
+            tempfile.tempdir = None
+            shutil.rmtree(made, ignore_errors=True)
+            shutil.rmtree(long_tmp, ignore_errors=True)
+
+    def test_short_tmpdir_is_kept(self):
+        # The session sandbox (tests/conftest.py) can itself be long - under /data/hermes/scratch/crew-publish it
+        # is 62 characters, past the socket limit - so the test makes its own short TMPDIR instead of assuming one.
+        short = tempfile.mkdtemp(prefix="s", dir="/tmp" if os.name == "posix" else None)
+        old, cached = os.environ.get("TMPDIR"), tempfile.tempdir
+        os.environ["TMPDIR"] = short
+        tempfile.tempdir = None
+        made = ""
+        try:
+            made = pb.chrome_scratch("crew-x-")
+            self.assertTrue(made.startswith(short), made)
+        finally:
+            if old is None:
+                os.environ.pop("TMPDIR", None)
+            else:
+                os.environ["TMPDIR"] = old
+            tempfile.tempdir = cached
+            shutil.rmtree(made, ignore_errors=True)
+            shutil.rmtree(short, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

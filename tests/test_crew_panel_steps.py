@@ -192,33 +192,16 @@ class CallsBoxTests(unittest.TestCase):
 
 
 class ReconcileInPlaceTests(unittest.TestCase):
-    """updatePanel reconciles in place (req 6) - no innerHTML wipe of panel."""
+    """The card page reconciles in place on a poll (req 6). The old tests read card.js; the React page is proven by
+    tests/desktop_plugin_harness.mjs (run by test_crew_desktop_plugin), which drives the real components under jsdom.
+    This pins that those assertions stay in the harness, so the coverage cannot be dropped without a failing test."""
 
-    def test_panel_not_wholed(self):
-        """updatePanel (ui-spec section 5 panel) builds the skeleton once and then patches its sections:
-        setHTML replaces a section only when its markup changed, and the Transcript/Calls lists go through
-        the keyed reconcile - the panel itself is never wiped on a poll."""
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
-        panel_func = src[src.find("function updatePanel()"):src.find("function flashCopy(")]
-        self.assertNotIn('p.innerHTML = ""', panel_func)
-        self.assertIn("panelSkeleton(p)", panel_func)
-        self.assertIn("reconcile(list,", panel_func)
-        skeleton = src[src.find("function panelSkeleton(p)"):src.find("function currentTab(")]
-        self.assertIn('if(p.querySelector(".phead")) return;', skeleton)
-
-    def test_scroll_preserved(self):
-        """updatePanel saves and restores the scrolling body's scrollTop."""
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
-        panel_func = src[src.find("function updatePanel()"):src.find("function flashCopy(")]
-        self.assertIn("scrollTop = body.scrollTop", panel_func)
-        self.assertIn("body.scrollTop = scrollTop", panel_func)
-
-    def test_selection_preserved(self):
-        """updatePanel saves and restores the selection range."""
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
-        panel_func = src[src.find("function updatePanel()"):src.find("function flashCopy(")]
-        self.assertIn("getSelection", panel_func)
-        self.assertIn("selRange", panel_func)
+    def test_the_harness_asserts_the_in_place_behaviour(self):
+        src = open(os.path.join(HERE, "desktop_plugin_harness.mjs"), encoding="utf-8").read()
+        for claim in ("the first call row is the same DOM node after the poll (no remount)",
+                      "the panel body keeps its element and its scroll offset",
+                      "page chrome stays mounted"):
+            self.assertIn(claim, src)
 
 
 class LivenessRuleTests(unittest.TestCase):
@@ -237,18 +220,25 @@ class LivenessRuleTests(unittest.TestCase):
 
 
 class CoordinatorTargetTests(unittest.TestCase):
-    """coordinatorTarget (card.js) turns the body's Coordinator value into the chat to open, run under node."""
+    """coordinatorTarget (ui/src/card-format.ts) turns the body's Coordinator value into the chat to open. The
+    function is cut out of the source and run by node, which strips the types itself (node 22.6 and later)."""
 
     def test_cases(self):
         node = shutil.which("node")
         if not node:
             self.skipTest("node not installed")
-        src = open(os.path.join(os.path.dirname(HERE), "scripts", "crew_dashboard", "card.js"), encoding="utf-8").read()
-        fn = re.search(r"function coordinatorTarget\(value\)\{.*?\n\}\n", src, re.S).group(0)
+        ver = subprocess.run([node, "--version"], capture_output=True, text=True).stdout.strip().lstrip("v").split(".")
+        if (int(ver[0]), int(ver[1])) < (22, 6):
+            self.skipTest("node strips types from 22.6")
+        src = open(os.path.join(os.path.dirname(HERE), "ui", "src", "card-format.ts"), encoding="utf-8").read()
+        fn = re.search(r"export function coordinatorTarget\(value: unknown\).*?\n\}\n", src, re.S).group(0)
         cases = [("owner-chat/20261015T1200-abc", {"profile": "owner-chat", "session": "20261015T1200-abc"}),
                  ("va/no-session", None), ("bad profile/x", None), ("", None), ("a/b/c", None), ("va/", None)]
-        script = fn + "\nconsole.log(JSON.stringify(%s.map(coordinatorTarget)));" % json.dumps([c[0] for c in cases])
-        out = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+        with tempfile.TemporaryDirectory(prefix="crew-coord-") as tmp:
+            path = os.path.join(tmp, "coordinator.ts")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(fn + "\nconsole.log(JSON.stringify(%s.map(coordinatorTarget)));\n" % json.dumps([c[0] for c in cases]))
+            out = subprocess.run([node, path], capture_output=True, text=True, timeout=30)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertEqual(json.loads(out.stdout), [c[1] for c in cases])
 

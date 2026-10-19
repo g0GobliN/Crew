@@ -525,7 +525,7 @@ class StaleScriptsTests(unittest.TestCase):
         import io
         home = tempfile.mkdtemp(prefix="crew-stale-unit-")
         scripts = os.path.join(home, "scripts")
-        for rel in ("crew_card.py", "crew_dashboard/crew.css", "crew_follow.py", "worker_route.py", "owner_hook.sh"):
+        for rel in ("crew_card.py", "crew_dashboard/app.js", "crew_follow.py", "worker_route.py", "owner_hook.sh"):
             os.makedirs(os.path.dirname(os.path.join(scripts, rel)), exist_ok=True)
             Path(scripts, rel).write_text("x", encoding="utf-8")
         status, detail = CI.step_scripts(home, False)
@@ -534,7 +534,7 @@ class StaleScriptsTests(unittest.TestCase):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             CI.step_scripts(home, True)
-        for rel in ("crew_card.py", "crew_dashboard/crew.css", "crew_follow.py"):
+        for rel in ("crew_card.py", "crew_dashboard/app.js", "crew_follow.py"):
             self.assertFalse(os.path.exists(os.path.join(scripts, rel)), rel)
             self.assertIn(os.path.join(scripts, rel), buf.getvalue())
         self.assertTrue(os.path.exists(os.path.join(scripts, "worker_route.py")))
@@ -551,7 +551,20 @@ class PluginCarriesScriptsTests(unittest.TestCase):
         home = tempfile.mkdtemp(prefix="crew-plugin-unit-")
         self.assertEqual("CHANGED", CI.step_plugin(home, True)[0])
         self.assertTrue(os.path.isfile(os.path.join(home, "plugins", "crew", "scripts", "crew_card.py")))
-        self.assertTrue(os.path.isfile(os.path.join(home, "plugins", "crew", "scripts", "crew_dashboard", "crew.css")))
+        self.assertTrue(os.path.isfile(os.path.join(home, "plugins", "crew", "scripts", "crew_dashboard", "app.js")))
+        self.assertEqual("OK", CI.step_plugin(home, False)[0])
+
+    def test_an_upgrade_drops_the_pre_react_dashboard_files(self):
+        home = tempfile.mkdtemp(prefix="crew-plugin-old-")
+        CI.step_plugin(home, True)
+        dash = os.path.join(home, "plugins", "crew", "scripts", "crew_dashboard")
+        for name in ("board.js", "card.js", "lib.js", "crew.css", "tokens.css"):
+            Path(dash, name).write_text("old", encoding="utf-8")
+        self.assertEqual("CHANGED", CI.step_plugin(home, False)[0], "a copy that still holds them is stale")
+        CI.step_plugin(home, True)
+        for name in ("board.js", "card.js", "lib.js", "crew.css", "tokens.css"):
+            self.assertFalse(os.path.exists(os.path.join(dash, name)), name)
+        self.assertTrue(os.path.isfile(os.path.join(dash, "app.js")))
         self.assertEqual("OK", CI.step_plugin(home, False)[0])
 
 

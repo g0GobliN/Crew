@@ -83,7 +83,10 @@ RETIRED_SCRIPT_FILES = ["crew_follow.py", "crew_follow_proof.py", "crew_observer
                         "crew_dashboard/favicon.png", "kanban_zulip_feed.py", "kanban_zulip_columns.py",
                         "kanban_feed_mute_proof.py", "kanban_feed_mute_live_proof.py",
                         "kanban_move_notice_proof.py", "kanban_overview_dedupe_proof.py",
-                        "crew_zulip_route_proof.py"]
+                        "crew_zulip_route_proof.py",
+                        # the pre-React dashboard files; crew_dashboard/app.js replaced them (desktop v2)
+                        "crew_dashboard/board.js", "crew_dashboard/card.js", "crew_dashboard/lib.js",
+                        "crew_dashboard/crew.css", "crew_dashboard/tokens.css"]
 # The plugin copy in a profile is the package's plugin files plus its scripts/: everything crew runs is
 # loaded from <profile>/plugins/crew/ and never from <profile>/scripts/. `hermes plugins install` clones the
 # whole repo into the same place, so the layout is the same in both install modes.
@@ -94,7 +97,8 @@ PLUGIN_FILES = (["plugin.yaml", "__init__.py", "skills/crew-verifier/SKILL.md",
                  "desktop/plugin.js"]
                 + ["scripts/" + rel for rel in SCRIPT_FILES])
 # Files the plugin copy once held and the package has since deleted: their presence makes the copy stale.
-PLUGIN_RETIRED_FILES = ["scripts/crew_proofs.sh"]
+PLUGIN_RETIRED_FILES = ["scripts/crew_proofs.sh"] + ["scripts/" + r for r in RETIRED_SCRIPT_FILES
+                                                    if r.startswith("crew_dashboard/")]
 ROLE_FILES = ["roles.json", "briefs/coordinator.md", "briefs/worker.md", "briefs/content.md",
               "briefs/verifier.md"]
 
@@ -1771,6 +1775,8 @@ def main():
 
 
 if __name__ == "__main__":
+    import crew_proc
+    crew_proc.utf8_stdio()   # a piped Windows run defaults to cp1252 and died on the first non-ASCII glyph (found on the VM gate 2026-10-18)
     try:
         sys.exit(main())
     except Exception as exc:

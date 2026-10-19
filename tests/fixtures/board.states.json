@@ -1,0 +1,518 @@
+{
+ "generated_at": 1792349804,
+ "node": "testbox",
+ "live": 2,
+ "lanes": [
+  {
+   "key": "blocked",
+   "label": "Needs you",
+   "tiles": [
+    {
+     "id": "t_abc00001",
+     "title": "Blocked: needs the owner to pick a vendor",
+     "status": "blocked",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 3600,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "Waiting on a decision.",
+     "verdict": null
+    },
+    {
+     "id": "t_abc00002",
+     "title": "Triage: unclear scope for the export job",
+     "status": "triage",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 7200,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "",
+     "verdict": null
+    }
+   ],
+   "hidden": 0
+  },
+  {
+   "key": "running",
+   "label": "Working",
+   "tiles": [
+    {
+     "id": "t_abc00003",
+     "title": "Port the board to React",
+     "status": "running",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 3,
+     "active": {
+      "profile": "crew-worker",
+      "run": 4,
+      "for_s": 240,
+      "quiet_s": 12,
+      "steps": 23,
+      "last_tool": "terminal"
+     },
+     "age_s": 10800,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "Short note on what this card is about.",
+     "verdict": null,
+     "budget": {
+      "used": 1300000,
+      "ceiling": 1500000,
+      "pct": 86.7
+     }
+    },
+    {
+     "id": "t_abc00004",
+     "title": "A run that went quiet",
+     "status": "running",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": {
+      "profile": "crew-verifier",
+      "run": 4,
+      "for_s": 5000,
+      "quiet_s": 400,
+      "steps": 0,
+      "last_tool": ""
+     },
+     "age_s": 14400,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "Short note on what this card is about.",
+     "verdict": null,
+     "budget": {
+      "used": 1600000,
+      "ceiling": 1500000,
+      "pct": 106.7
+     }
+    }
+   ],
+   "hidden": 0
+  },
+  {
+   "key": "review",
+   "label": "In review",
+   "tiles": [
+    {
+     "id": "t_abc00005",
+     "title": "Waiting for review",
+     "status": "review",
+     "test": false,
+     "assignee": "",
+     "role": "",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 18000,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "Short note on what this card is about.",
+     "verdict": null
+    }
+   ],
+   "hidden": 0
+  },
+  {
+   "key": "queued",
+   "label": "Queued",
+   "tiles": [
+    {
+     "id": "t_abc00006",
+     "title": "Ready and queued",
+     "status": "ready",
+     "test": false,
+     "assignee": "",
+     "role": "",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 21600,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "Short note on what this card is about.",
+     "verdict": null
+    },
+    {
+     "id": "t_abc00007",
+     "title": "Todo item with a long title that has to wrap onto a second line and then clamp at two lines in total for sure",
+     "status": "todo",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 25200,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "Short note on what this card is about.",
+     "verdict": null
+    }
+   ],
+   "hidden": 0
+  },
+  {
+   "key": "done",
+   "label": "Done",
+   "tiles": [
+    {
+     "id": "t_962dc51e",
+     "title": "Example app: SDK 54 -> 58 upgrade (clear 51 HIGH npm advisories)",
+     "status": "done",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 195856,
+     "settled_s": 194424,
+     "last_outcome": "completed",
+     "summary": "Example app reached the new framework version on a feature branch, one commit per step plus fix commits (6 total, nothing pushed, nothing merged). Every step was gated green on typecheck, lint, tests and export. The page is a single self-contained file with no external assets or build step. A proof ",
+     "verdict": "PASS"
+    },
+    {
+     "id": "t_b417441b",
+     "title": "Security: non-breaking npm audit fixes across all products (from security report 2026-10-16)",
+     "status": "done",
+     "test": false,
+     "assignee": "claude",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 198491,
+     "settled_s": 196490,
+     "last_outcome": "completed",
+     "summary": "Finished the dependency audit pass one repo at a time: critical and high findings dropped sharply, none critical left, several commits on a fix branch (nothing pushed), a few killed-run edits reverted. Every directory has a line in the audit log with its before and after. The page is a single self-c",
+     "verdict": "FAIL"
+    },
+    {
+     "id": "t_7473c177",
+     "title": "Top 5 city guides 2026 - single-file ranked page",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 4,
+     "active": null,
+     "age_s": 1217110,
+     "settled_s": 1216518,
+     "last_outcome": "completed",
+     "summary": "Reviewed and approved. The single-file index.html renders 5 ranked 2026 city guides, each with a visible citation (outlet + URL); the ranking matches the cited source (verified independently against it), and the page is fully self-contained with zero external requests. The page is a single self-cont",
+     "verdict": "unverified",
+     "budget": {
+      "used": 258664,
+      "ceiling": 1500000,
+      "pct": 17.2
+     }
+    },
+    {
+     "id": "t_d365d506",
+     "title": "Tool comparison site",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "content",
+     "color": "#f778ba",
+     "runs": 5,
+     "active": null,
+     "age_s": 1312016,
+     "settled_s": 1309851,
+     "last_outcome": "completed",
+     "summary": "Verifier round 2: PASS (proof rc=0, \"ALL CHECKS PASSED\", verdict recorded). Round 1 defect fixed: the comparison table now shows a visible 1-5 score pill in every dimension cell, and each row's five scores sum exactly to its total. The page is a single self-contained file with no external assets or ",
+     "verdict": "PASS",
+     "budget": {
+      "used": 978145,
+      "ceiling": 1500000,
+      "pct": 65.2
+     }
+    },
+    {
+     "id": "t_6a7c3296",
+     "title": "Product roundup 2026 landing page (6-item one-screen roundup)",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 3,
+     "active": null,
+     "age_s": 1318144,
+     "settled_s": 1317325,
+     "last_outcome": "completed",
+     "summary": "Verified the product roundup landing page as crew-verifier. Wrote the card's proof script and ran the proof through the verdict tool: rc=0, PASS, verdict recorded under the crew verdicts folder. The page is a single self-contained file with no external assets or build step. A proof script renders it",
+     "verdict": "PASS",
+     "budget": {
+      "used": 539745,
+      "ceiling": 1500000,
+      "pct": 36.0
+     }
+    },
+    {
+     "id": "t_d4bba221",
+     "title": "audit follow-up: Example topic explainer landing page",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1332493,
+     "settled_s": 1332283,
+     "last_outcome": "completed",
+     "summary": "Audit follow-up on t_d3c396cd: the proof failed because verify.py imported a third-party package that is absent in the proof-runner's Python. Rewrote the transport in verify.py as a minimal stdlib client, no third-party imports at all. The page is a single self-contained file with no external assets",
+     "verdict": "PASS",
+     "budget": {
+      "used": 74241,
+      "ceiling": 500000,
+      "pct": 14.8
+     }
+    },
+    {
+     "id": "t_d3c396cd",
+     "title": "Example topic explainer landing page",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1332723,
+     "settled_s": 1332523,
+     "last_outcome": "completed",
+     "summary": "Shipped a self-contained example-topic explainer landing page at /home/user/projects/example-site/index.html (plain HTML/CSS/JS, no external assets or build step) with hero, what-is, 3 use-cases, 4 risks, 3 FAQ items and a sources footer, plus verify.py which renders it in headless Chrome and checks",
+     "verdict": "FAIL",
+     "budget": {
+      "used": 64599,
+      "ceiling": 500000,
+      "pct": 12.9
+     }
+    },
+    {
+     "id": "t_ec148a2b",
+     "title": "v3 example product landing: static publish package + SEO layer",
+     "status": "done",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1533098,
+     "settled_s": 1532917,
+     "last_outcome": "completed",
+     "summary": "Shipped the v3 example product landing as a static publish package. dist/ contains exactly index.html (root), assets/logo.png, robots.txt, sitemap.xml; the head is indexable with a canonical URL and full social meta. The page is a single self-contained file with no external assets or build step. A p",
+     "verdict": "PASS",
+     "budget": {
+      "used": 99802,
+      "ceiling": 500000,
+      "pct": 20.0
+     }
+    }
+   ],
+   "hidden": 5
+  },
+  {
+   "key": "archived",
+   "label": "Archived",
+   "tiles": [
+    {
+     "id": "t_c9e643de",
+     "title": "crew tools live check (independent): write hello3.txt",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 2,
+     "active": null,
+     "age_s": 6749,
+     "settled_s": 6591,
+     "last_outcome": "completed",
+     "summary": "Verified: /tmp/crew-demo/hello3.txt contains exactly \"crew tools live\". Proof command `test \\\"$(cat /tmp/crew-demo/hello3.txt)\\\" = \\\"crew tools live\\\"` returned PASS (rc=0, verdict logged in crew/verdicts/t_c9e643de.jsonl).",
+     "verdict": "PASS",
+     "budget": {
+      "used": 72124,
+      "ceiling": 1500000,
+      "pct": 4.8
+     }
+    },
+    {
+     "id": "t_20f88c0e",
+     "title": "crew tools live check (proof): write hello2.txt",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 6757,
+     "settled_s": 6722,
+     "last_outcome": "completed",
+     "summary": "Wrote /tmp/crew-demo/hello2.txt containing exactly \"crew tools live\". Proof command `test \\\"$(cat /tmp/crew-demo/hello2.txt)\\\" = \\\"crew tools live\\\"` passed with PASS verdict.",
+     "verdict": "PASS",
+     "budget": {
+      "used": 42602,
+      "ceiling": 1500000,
+      "pct": 2.8
+     }
+    },
+    {
+     "id": "t_e4276ef6",
+     "title": "crew tools live check: write hello.txt",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 2,
+     "active": null,
+     "age_s": 7178,
+     "settled_s": 7068,
+     "last_outcome": "completed",
+     "summary": "Wrote /tmp/crew-demo/hello.txt containing exactly \"crew tools live\". Proof command test passed: file content matches expected line. Verifier verdict PASS (rc=0).",
+     "verdict": "PASS",
+     "budget": {
+      "used": 91841,
+      "ceiling": 1500000,
+      "pct": 6.1
+     }
+    },
+    {
+     "id": "t_68456696",
+     "title": "Example backend: move VM -> board a1 (needs USB stick + 64-bit OS)",
+     "status": "archived",
+     "test": false,
+     "assignee": "",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 0,
+     "active": null,
+     "age_s": 1106278,
+     "settled_s": null,
+     "last_outcome": "",
+     "summary": "",
+     "verdict": null
+    },
+    {
+     "id": "t_9812d07f",
+     "title": "Top 5 city guides 2026 - webpage",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-content",
+     "role": "content",
+     "color": "#f778ba",
+     "runs": 1,
+     "active": null,
+     "age_s": 1224644,
+     "settled_s": 1224235,
+     "last_outcome": "blocked",
+     "summary": "stopped by owner (/crew-stop) - continue with /crew-unstuck t_9812d07f",
+     "verdict": "unverified",
+     "budget": {
+      "used": 179987,
+      "ceiling": 1500000,
+      "pct": 12.0
+     }
+    },
+    {
+     "id": "t_f70e8713",
+     "title": "City guides 2026 - one-page site",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-worker",
+     "role": "worker",
+     "color": "#58a6ff",
+     "runs": 1,
+     "active": null,
+     "age_s": 1225938,
+     "settled_s": 1225888,
+     "last_outcome": "blocked",
+     "summary": "stopped by owner (/crew-stop) - continue with /crew-unstuck t_f70e8713",
+     "verdict": "unverified"
+    },
+    {
+     "id": "t_3f619c1d",
+     "title": "Example sector landing page",
+     "status": "archived",
+     "test": false,
+     "assignee": "crew-verifier",
+     "role": "content",
+     "color": "#f778ba",
+     "runs": 5,
+     "active": null,
+     "age_s": 1322727,
+     "settled_s": 1320974,
+     "last_outcome": "reclaimed",
+     "summary": "task archived with run still active",
+     "verdict": "PASS",
+     "budget": {
+      "used": 1063681,
+      "ceiling": 1500000,
+      "pct": 70.9
+     }
+    }
+   ],
+   "hidden": 0
+  }
+ ],
+ "counts": {
+  "running": 2,
+  "blocked": 2,
+  "review": 1,
+  "ready": 1,
+  "todo": 1,
+  "done": 8
+ },
+ "cards": 15,
+ "test_cards": 0,
+ "attention": {
+  "rows": [
+   {
+    "id": "t_abc00001",
+    "status": "blocked",
+    "title": "Blocked: needs the owner to pick a vendor",
+    "who": "worker",
+    "age_s": 7200,
+    "entered_ts": 1,
+    "ack_url": "/ack/t_abc00001",
+    "color": "#58a6ff"
+   },
+   {
+    "id": "t_962dc51e",
+    "status": "done",
+    "title": "Example app: SDK 54 -> 58 upgrade (clear 51 HIGH npm advisories)",
+    "who": "claude",
+    "age_s": 194424,
+    "entered_ts": 1,
+    "ack_url": "/ack/t_962dc51e",
+    "color": "#58a6ff"
+   }
+  ],
+  "stuck": 1,
+  "done": 1,
+  "total": 2,
+  "ack_all": "/ack/all"
+ }
+}

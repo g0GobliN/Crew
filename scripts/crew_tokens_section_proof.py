@@ -306,7 +306,7 @@ def check_pages(args, board, host, states):
         return 2
 
     url = "http://%s/card/%s" % (host, cards[0])
-    profile = tempfile.mkdtemp(prefix="crew-tokens-")
+    profile = crew_proof_board.chrome_scratch("crew-tokens-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox",
          "--remote-debugging-port=%d" % PORT, "--user-data-dir=" + profile,

@@ -5,7 +5,7 @@
 **You ask once. A coordinator owns the card until its proof passes.**
 
 [![Hermes plugin](https://img.shields.io/badge/Hermes-plugin-3fb950?style=flat-square)](https://github.com/NousResearch/hermes-agent)
-[![Version](https://img.shields.io/badge/version-0.9.15-3fb950?style=flat-square)](plugin.yaml)
+[![Version](https://img.shields.io/badge/version-0.10.0-3fb950?style=flat-square)](plugin.yaml)
 [![tests](https://github.com/macd2/Crew/actions/workflows/tests.yml/badge.svg)](https://github.com/macd2/Crew/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -32,6 +32,19 @@ hands the card to a **coordinator** that owns it until the proof command exits 0
 result back in the same chat, or one concrete question when it truly needs you.
 
 [![The crew dashboard: a card's graph with its running worker selected and the live transcript](assets/dashboard.webp)](https://crew.forgecoreai.com)
+
+## What's new in 0.10.0
+
+- **Native Desktop UI.** Crew is a page of Hermes Desktop itself, not a frame around a web page: board, card page and
+  flow graph in the app's colours, light and dark.
+- **The Crew flow pane**, following the live card, with a selector when several cards run.
+- **A button bar on every card**: Unstuck, Retry, Stop and Open chat, the same commands as the slash commands; **Proof** appears only when the card has a proof question waiting.
+- **Chat-style transcripts** in the Desktop card page: lists and code fences keep their shape.
+- **One UI in three places.** The browser dashboard, the Hermes web UI tab and Desktop run the same app, built from
+  one source (`ui/`).
+- Since 0.9.13: the roles use native tools (`crew_verdict`, `crew_progress`, ...) instead of shell lines.
+
+See [Crew in Hermes Desktop](#crew-in-hermes-desktop).
 
 ## Why
 
@@ -118,30 +131,65 @@ review them with `hermes -p P hooks list` and confirm them at Hermes's own promp
 
 ## Crew in Hermes Desktop
 
-Hermes Desktop gets a **Crew** page in its sidebar: the crew board and each card's page (steps, findings, proof,
-verdict), the same pages as the browser dashboard, with the acknowledge buttons. It needs no separate
-server and no systemd, so it works on Windows too.
+![Crew in Hermes Desktop, dark: the Crew sidebar entry, a card page with its flow graph and button bar, and the Crew flow pane with its live-card selector](assets/desktop-dark.png)
 
-Desktop starts one backend, for the profile it was launched with, and loads the page's data from that profile's
-`plugins/` folder plus the Hermes root `plugins/` folder.
+Hermes Desktop gets a **Crew** page in its sidebar, built from the same app as the browser dashboard and drawn with
+the app's own colours. It needs no separate server and no systemd, so it works on Windows too.
+
+**What you get**
+
+- **The native board.** Every card by lane, the counts, the notes bell with its acknowledge buttons.
+- **The card page with its flow graph.** Steps, findings, proof and verdict, and the graph of the card's runs,
+  sessions and subagents, live. No iframe: it is part of the app.
+- **The Crew flow pane.** A pane on the right that shows the graph of the card the crew is working on right now and
+  follows it from card to card. When several cards run at once the pane header shows a selector (short id and title);
+  your pick is kept until that card stops, then the pane falls back to the first live one.
+- **The card's button bar.** **Unstuck**, **Retry** and **Stop** act on the card (Stop asks first, in the
+  app's own confirm dialog); each is on only when the card's state allows it. **Proof** is drawn only when the card has a
+  proof question waiting, and then it is on. **Open chat** opens the coordinator's session in its own window. On the
+  board, the cards in the Needs-you lane carry **Unstuck** and **Retry** too (and **Proof** under the same rule); no
+  other lane's tiles have buttons.
+- **A popup when a card needs you.** When a card newly lands in Needs you, Crew shows a Desktop toast (and the OS
+  notification while you are away) with an **Open in Crew** button that opens that card's page. Desktop's own Kanban
+  toast, if you enabled the Kanban plugin, still opens the Kanban board; a plugin cannot redirect it.
+- **Chat-style transcripts.** A run's own words are drawn by the app's chat renderer: lists, code blocks, links and
+  inline code look as they do in a chat.
+- **Light and dark follow the app.** Switch the app's mode and Crew switches with it.
+- **One Kanban row.** Crew hides the app's Kanban row while it is enabled; the switch in the Crew header brings it back.
+
+**Set it up**
+
+1. Install crew into the profile Desktop starts with, as in [Install](#install) (on Windows see
+   [WINDOWS.md](WINDOWS.md)); with one profile that is `default`. Desktop mounts the Crew page's data from the profile it
+   was launched with, not the one you switch to inside the app: if you use another profile, either install crew there
+   too or start Desktop with the profile crew is in (point `HERMES_HOME` at that profile's folder when you launch it).
+   Desktop remembers the profile you last picked in its profile rail and uses it from the next launch, so restart
+   Desktop after switching.
+2. Enable the plugin: the installer already runs `hermes plugins enable crew`, which puts `crew` in `plugins.enabled`
+   of the profile's `config.yaml` (check with `hermes -p NAME plugins list`).
+3. In Desktop open **Capabilities > Plugins** and press **Rescan**. Desktop plugins are opt-in, so switch on crew's
+   desktop half there too (switching the agent half on also switches its Desktop half on).
+4. **Crew** appears in the sidebar.
+
+**If the page says `Crew could not load: 404 Not Found`**, Desktop is running a profile that has no crew (or an
+older crew without the Desktop half): the plugin's data routes are mounted from the launch profile only. Install crew
+into that profile, or relaunch Desktop with the profile crew is in, then Rescan.
 
 **Setting this up with an agent?** Run `hermes profile list` to see the profiles, then read the Hermes docs on
 [Desktop profiles](https://hermes-agent.nousresearch.com/docs/user-guide/desktop#sessions--profiles) and
 [profiles](https://hermes-agent.nousresearch.com/docs/user-guide/profiles).
 
-**Quick start**
+### Two modes
 
-1. Install crew as in [Install](#install): `hermes plugins install macd2/Crew`, then
-   `python3 ~/.hermes/plugins/crew/install.py --profile NAME` (on Windows see [WINDOWS.md](WINDOWS.md)).
-2. Install crew into the profile you use in Desktop (with one profile, that is `default`). If you switch profile in
-   the app's profile rail, Desktop remembers it and uses it from the next launch, so restart Desktop after
-   switching and the Crew page follows. The installer copies `desktop/plugin.js` and `dashboard/plugin_api.py`
-   with the rest of the plugin. If the Crew page later says `Crew could not load: 404 Not Found`, Desktop is
-   running a profile that has no crew: install it there.
-3. The installer already runs `hermes plugins enable crew` and enables the kanban toolset for `NAME`. In Desktop,
-   open **Settings > Plugins**, press **Rescan**, and check that **Crew** is switched on (switching the agent
-   half on also switches its Desktop half on).
-4. Open **Crew** in the sidebar: you see the crew board, and a click on a card opens its page.
+Crew has one interface and two ways to run it, in plain words:
+
+- **Terminal (no Desktop).** Install as usual and keep the browser dashboard: same URL (`http://127.0.0.1:8799`),
+  same `crew-graph-http` unit, same look. What changed is that it now serves one React app instead of three scripts.
+- **Hermes Desktop.** The same app, native in the sidebar, with the flow pane and the button bar. It needs no daemon:
+  Desktop's own backend serves crew's data.
+
+Both read the same kanban board and the same session store, so a card looks the same in either, and you can use both
+at once. The **Hermes web UI** dashboard tab runs the same app too.
 
 ## Use
 
@@ -259,6 +307,12 @@ The role profiles stay until you remove them (`hermes profile delete crew-worker
 ## Contributing
 
 Pull requests run the test suite in GitHub Actions (Python 3.11 and 3.12). Please keep `python -m pytest tests -q` green; a first-time contributor's run starts after a maintainer approves it.
+
+The interface lives in `ui/`: TSX source, built with esbuild into two generated files that are committed, `desktop/plugin.js`
+(Hermes Desktop) and `scripts/crew_dashboard/app.js` (the browser dashboard and the Hermes web UI tab). Never edit
+those two by hand. After changing `ui/src`, run `npm ci --prefix ui` once, then `node ui/build.mjs` to regenerate them;
+`node ui/build.mjs --check` fails when a generated file is stale (the plugin version from `plugin.yaml` is embedded, so a version bump needs a rebuild), and it runs in CI and in the publish gate (the old
+`board.js`, `card.js` and `crew.css` are gone). `ui/node_modules/.bin/tsc -p ui` type-checks the source.
 
 ## License
 

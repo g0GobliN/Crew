@@ -85,20 +85,6 @@ class RowClearedTests(NotesTestCase):
         self.assertFalse(serve.row_cleared(self.row(cid="t_1", entered_ts=100), acks))
 
 
-class NotesTotalTests(NotesTestCase):
-    """notes_total(att): the number the bell shows."""
-
-    def test_it_is_the_list_s_own_total(self):
-        self.assertEqual(7, serve.notes_total({"rows": [{}] * 7, "stuck": 2, "done": 5, "total": 7}))
-
-    def test_it_falls_back_to_stuck_plus_done(self):
-        self.assertEqual(3, serve.notes_total({"stuck": 1, "done": 2}))
-
-    def test_an_empty_list_reads_zero(self):
-        self.assertEqual(0, serve.notes_total({}))
-        self.assertEqual(0, serve.notes_total(None))
-
-
 class ProbeCardTests(NotesTestCase):
     """is_probe_card(title): the scaffolding rule the clear-all walk has to apply too."""
 

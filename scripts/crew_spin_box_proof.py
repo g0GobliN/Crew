@@ -264,7 +264,7 @@ def main():
         print("PROOF FAIL: could not seed the probe cards")
         return 2
 
-    profile = tempfile.mkdtemp(prefix="crew-spinbox-")
+    profile = crew_proof_board.chrome_scratch("crew-spinbox-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox", "--remote-debugging-port=%d" % PORT,
          "--user-data-dir=" + profile, "--window-size=1400,900", "%s/card/%s" % (URL, spinning)],

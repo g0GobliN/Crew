@@ -1,0 +1,8 @@
+# One line ending everywhere: the browser bundle embeds the stylesheets verbatim (esbuild loader .css: text), so a
+# CRLF checkout (GitHub's Windows runners default to autocrlf) built different bytes and failed the bundle check.
+* text=auto eol=lf
+*.woff2 binary
+*.png binary
+*.webp binary
+*.jpg binary
+*.ico binary

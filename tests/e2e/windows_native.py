@@ -230,8 +230,11 @@ def step_dashboard(c):
     check(res.status_code == 200, "plugin api /board.json -> 200")
     data = json.loads(body)
     check("crew e2e card" in body and c.card_id in body, "the board JSON carries card %s (%d bytes, keys %s)" % (c.card_id, len(body), sorted(data)[:6]))
-    res = plugin_api.get_card(c.card_id, Request(dict(scope, path="/api/plugins/crew/card/" + c.card_id)))
-    check(res.status_code == 200 and c.card_id in res.body.decode("utf-8"), "plugin api /card/%s -> 200" % c.card_id)
+    # 0.10.0: the card route is JSON only (the React page asks for <id>.json; a bare id answers 404)
+    res = plugin_api.get_card(c.card_id + ".json", Request(dict(scope, path="/api/plugins/crew/card/" + c.card_id + ".json")))
+    check(res.status_code == 200 and c.card_id in res.body.decode("utf-8"), "plugin api /card/%s.json -> 200" % c.card_id)
+    res = plugin_api.get_app_js(Request(dict(scope, path="/api/plugins/crew/app.js")))
+    check(res.status_code == 200 and b"page-board" in res.body, "plugin api /app.js -> 200 with the app (%d bytes)" % len(res.body))
     # the standalone server, the way WINDOWS.md starts it, over real HTTP
     port = 18799
     env = dict(c.script_env(), CREW_GRAPH_PORT=str(port), CREW_GRAPH_BIND="127.0.0.1")

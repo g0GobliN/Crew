@@ -157,7 +157,7 @@ JS = r"""
     sitText: sit ? sit.innerText : '',
     whiteSpace: ws, wrapOk: wrapOk, whyHeight: height,
     boxBorder: box ? getComputedStyle(box).borderTopWidth : '',
-    cardId: (document.body && document.body.dataset ? document.body.dataset.card : '') || '',
+    cardId: ((document.querySelector('.page-card') || document.body).dataset.card) || '',   // data-card sat on <body> in the script page, on .page-card now
     copy: !!document.getElementById('sitCopy'),
     copyTag: document.getElementById('sitCopy') ? document.getElementById('sitCopy').tagName : '',
     copyLabel: document.getElementById('sitCopy') ? document.getElementById('sitCopy').innerText : '',
@@ -293,7 +293,7 @@ def main():
         print("PROOF FAIL: could not seed the probe cards")
         return 2
 
-    profile = tempfile.mkdtemp(prefix="crew-sitbox-")
+    profile = crew_proof_board.chrome_scratch("crew-sitbox-")
     proc = subprocess.Popen(
         [CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox", "--remote-debugging-port=%d" % PORT,
          "--user-data-dir=" + profile, "--window-size=1400,900", "%s/card/%s" % (URL, pending)],

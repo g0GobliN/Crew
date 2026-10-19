@@ -12,6 +12,7 @@ exits non-zero when any of them fails, so a cron job or a git hook can gate on i
   crew_proofs.py --list              what would run, and what is held back, and why
   crew_proofs.py --json              the same result as data
   crew_proofs.py --timeout 900       per-proof ceiling in seconds (default 600)
+  crew_proofs.py --jobs 4            proofs that run at once (default: cores / 2, 2 to 4; 1 = strictly serial)
   crew_proofs.py --changed           proofs touched by the working tree, for a pre-push gate
 
 Exit: 0 when every proof that ran passed, 1 when one failed, 2 when the runner itself could not run.
@@ -21,16 +22,24 @@ Every proof runs on the kernel's `crew-proofs` board, never the live one: the ru
 (crew_proof_board.proofs_env). A proof that seeds cards calls crew_proof_board.require_proof_board first
 and exits 2 when it would write to the live default board.
 
+Parallel run: only the proofs in ISOLATED run beside each other and beside the rest. Each of them builds a
+scratch board, a scratch HERMES_HOME and its own temp dir (or only reads), so they share nothing. Every other
+proof seeds or reads the shared `crew-proofs` board, or drives a Chrome on a fixed port, so those run one after
+another in a single lane (a proof not listed in ISOLATED is in that lane: a new proof is serial until it is
+shown to be independent). The result of every proof is the same serial or parallel; only the wall time differs.
+
 Live-service proofs are held back by default: they send a real message or drive the desktop
 panel, so they need a reachable server and they leave traces. They run with --all, and they are named
 in --list as skipped, never silently dropped.
 """
 import argparse
+import concurrent.futures
 import json
 import os
 import re
 import subprocess
 import sys
+import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +67,22 @@ LIVE_BOARD = {"crew_graph_flow_check.py"}
 # crew_tokens_section_proof.py left this set (issue #15): it seeds its own probe cards on the proofs board,
 # because a fresh board had no card in every state and the proof failed with "no card page to check".
 LIVE_READERS = {"crew_route_trail_proof.py"}
+
+# Proofs that share nothing with any other proof: each makes a scratch kanban board (HERMES_KANBAN_DB pinned
+# to a file in its own temp dir, or the coordinator proof's TMP), a scratch HERMES_HOME, a free port, and its
+# own throwaway Chrome profile; the rest only read. These run in the worker pool. Anything else uses the
+# shared crew-proofs board (crew_proof_board.proof_db / graph_base) and stays in the serial lane.
+ISOLATED = {
+    "crew_coordinator_proof.py", "crew_two_stage_proof.py", "crew_origin_open_proof.py",
+    "crew_heal_proof.py", "crew_probe_skip_proof.py", "crew_route_floor_proof.py",
+    "crew_intake_create_proof.py", "crew_diagnose_proof.py", "crew_notify_proof.py",
+    "crew_permissions_proof.py", "crew_route_trail_proof.py", "crew_parity_check.py",
+    "crew_role_platforms_proof.py", "crew_option_commands_proof.py", "crew_panel_steps_proof.py",
+    "crew_signature_gate.py",
+}
+# Per-proof ceilings above the runner's default: this proof is a few dozen real `hermes kanban` CLI starts,
+# each seconds on an idle box and far more on a loaded one, so the default 600 s was the wall it hit.
+SLOW_TIMEOUT = {"crew_coordinator_proof.py": 1800}
 
 # A check that cannot run on its own: it takes an explicit card. It is held back with that reason
 # rather than reported as a failure, and it runs as soon as --card says which card to walk.
@@ -135,6 +160,7 @@ def child_env(name):
 
 def run_one(name, timeout, extra=()):
     started = time.time()
+    timeout = max(timeout, SLOW_TIMEOUT.get(name, 0))
     path = os.path.join(HERE, name)
     try:
         p = subprocess.run([sys.executable, path] + list(extra), cwd=HERE, capture_output=True,
@@ -147,6 +173,43 @@ def run_one(name, timeout, extra=()):
         out, rc = "runner error: %s" % exc, 125
     return {"file": name, "rc": rc, "seconds": round(time.time() - started, 1),
             "tail": "\n".join(out.strip().splitlines()[-3:])}
+
+
+def default_jobs():
+    """Half the cores, between 2 and 4: the proofs start Chrome and the hermes CLI, so more workers than
+    that only make each one slower (the coordinator proof times out first)."""
+    return max(2, min(4, (os.cpu_count() or 4) // 2))
+
+
+def run_all(picked, timeout, jobs, card, on_done=None):
+    """Run the picked proofs and return their results in `picked` order.
+
+    jobs == 1: one after another, as before. Otherwise the proofs outside ISOLATED run one after another in a
+    single lane (they share the crew-proofs board) while the ISOLATED ones run beside it in a pool of `jobs`
+    workers, the slowest-known first so the long tail starts early."""
+    def one(name):
+        extra = ["--card", card] if card and name in CARD_ARGS else []
+        r = run_one(name, timeout, extra)
+        if on_done:
+            on_done(r)
+        return r
+
+    if jobs <= 1:
+        return [one(n) for n in picked]
+    lane = [n for n in picked if n not in ISOLATED]
+    pool = sorted((n for n in picked if n in ISOLATED), key=lambda n: (-SLOW_TIMEOUT.get(n, 0), n))
+    done = {}
+
+    def run_lane():
+        for n in lane:
+            done[n] = one(n)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        futs = [ex.submit(run_lane)] if lane else []
+        futs += [ex.submit(lambda n=n: done.__setitem__(n, one(n))) for n in pool]
+        for f in futs:
+            f.result()
+    return [done[n] for n in picked]
 
 
 def _git_lines(args):
@@ -214,6 +277,8 @@ def main():
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--timeout", type=int, default=600)
+    ap.add_argument("--jobs", type=int, default=None,
+                    help="proofs to run at once (default: %d on this box; 1 = one after another)" % default_jobs())
     ap.add_argument("--changed", nargs="?", const="HEAD", default=None,
                     help="run only the proofs the tree changed (optionally since a revision)")
     ap.add_argument("--quiet", action="store_true",
@@ -251,24 +316,31 @@ def main():
         print("RUNNER ERROR: the crew-proofs board does not exist and `hermes kanban boards create "
               "crew-proofs` did not make it (%s)" % crew_proof_board.proofs_db())
         return 2
-    results = []
-    for name in picked:
-        extra = ["--card", a.card] if a.card and name in CARD_ARGS else []
-        r = run_one(name, a.timeout, extra)
-        results.append(r)
-        if not a.json and not a.quiet:
-            print("%-6s %-40s %6.1fs  %s" % ("PASS" if r["rc"] == 0 else "FAIL", r["file"],
-                                             r["seconds"], "" if r["rc"] == 0 else r["tail"][:200]))
+    lock = threading.Lock()
+
+    def show(r):
+        if a.json or a.quiet:
+            return
+        with lock:
+            print("%-6s %-40s %6.1fs  %s" % ("PASS" if r["rc"] == 0 else "FAIL", r["file"], r["seconds"],
+                                             "" if r["rc"] == 0 else r["tail"][:200]), flush=True)
+
+    t0 = time.time()
+    results = run_all(picked, a.timeout, max(1, a.jobs if a.jobs else default_jobs()), a.card, show)
+    wall = round(time.time() - t0, 1)
 
     failed = [r for r in results if r["rc"] != 0]
     if a.json:
         print(json.dumps({"ran": len(results), "failed": len(failed), "skipped": skipped,
-                          "results": results}, indent=1))
+                          "wall_seconds": wall, "results": results}, indent=1))
     elif a.quiet and not failed:
         return 0
     else:
-        print("\n%d proof(s) ran, %d failed, %d held back (live services)"
-              % (len(results), len(failed), len(skipped)))
+        print("\n%d proof(s) ran, %d failed, %d held back (live services); wall %.1fs, proofs add up to %.1fs"
+              % (len(results), len(failed), len(skipped), wall, sum(r["seconds"] for r in results)))
+        print("per proof, slowest first:")
+        for r in sorted(results, key=lambda x: -x["seconds"]):
+            print("  %7.1fs  %s  %s" % (r["seconds"], "PASS" if r["rc"] == 0 else "FAIL", r["file"]))
         for r in failed:
             print("  FAIL %s (exit %d)\n    %s" % (r["file"], r["rc"], r["tail"]))
     if failed:

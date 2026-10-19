@@ -167,7 +167,7 @@ def main():
     e = open_card("two-stage E", "true", "proof")
     g = plug._review_guard("kanban_request_review", {"task_id": e})
     check("E: kanban_request_review on a `Verify: proof` card is refused, naming verdict and kanban_complete",
-          g and g["action"] == "block" and "verdict --card %s" % e in g["message"] and "kanban_complete" in g["message"],
+          g and g["action"] == "block" and 'crew_verdict(card="%s")' % e in g["message"] and "kanban_complete" in g["message"],
           (g or {}).get("message", "allowed")[:90])
 
     # ---- F: independent verification

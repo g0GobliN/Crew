@@ -2,7 +2,9 @@
 """Proof for the crew dashboard index card (crew flow graph over HTTP, default 127.0.0.1:8799).
 
 Exit 0 = the index page meets the card's "Done when". Non-zero = it does not; the failing
-check is printed. Read-only: it fetches the live page and reads the kanban board.
+check is printed. Read-only: it renders the page and reads the kanban board. The page is the React app
+(a thin shell plus /app.js), so the page checks read the DOM headless Chrome draws (crew_proof_board.render_dom),
+not the HTTP body.
 
 Checks, default page /:
   1. the header carries the board's facts: the LIVE badge, "crew board", the card count, "N working now" /
@@ -23,6 +25,7 @@ Phase 2 of the UI spec (docs/crew/ui-spec/spec.md section 8):
 
 Env: CREW_GRAPH_URL overrides the base URL.
 """
+import html
 import importlib.util
 import os
 import re
@@ -230,7 +233,7 @@ def phase2_empty_board():
     try:
         mod = serve_module("cgs_empty_board")
         data = mod.board_data()
-        page = mod.board_page()
+        page = html.unescape(crew_proof_board.render_dom(crew_proof_board.start_graph(empty) + "/"))
     finally:
         for k, v in saved.items():
             if v is None:
@@ -252,8 +255,9 @@ def phase2_empty_board():
 
 def main():
     try:
-        page = fetch("/")
-        all_page = fetch("/?all=1")
+        fetch("/")
+        page = html.unescape(crew_proof_board.render_dom(URL + "/"))
+        all_page = html.unescape(crew_proof_board.render_dom(URL + "/?all=1#archived"))   # #archived opens the collapsed column
     except urllib.error.URLError as exc:
         return fail("crew graph not reachable at %s (%s)" % (URL, exc))
     except Exception as exc:  # noqa: BLE001
@@ -270,23 +274,23 @@ def main():
     blocked = [r for r in rows if r["status"] == "blocked" and not is_scaffolding(r["title"])]
     marked = [r for r in rows if TEST_RE.search(r["title"])]
 
-    # The header carries the board's own facts, server-rendered: badge, title, card count, working, counts.
+    # The header carries the board's own facts: badge, title, card count, working, counts.
     for word in HEADER_WORDS:
         if not re.search(r"<b>\d+</b>" + word, page):
             return fail("no header count for %r on the index" % word)
-    for fact in ("id=badge", "<h1>crew board</h1>", "id=cards", "id=live", "id=when", "tailnet"):
+    for fact in ('id="badge"', "<h1>crew board</h1>", 'id="cards"', 'id="live"', 'id="when"', "tailnet"):
         if fact not in page:
             return fail("the header lacks %r" % fact)
     # The brand mark: our logo with no background, the header's first element (very top left), an
     # embedded mark (no external asset) linking to the overview (/).
     if '<header><a class="brand" href="/"' not in page:
         return fail("the header has no brand mark as its first element (the very top left)")
-    if not re.search(r'<a class="brand" href="/"[^>]*><img src="data:image/svg\+xml;base64,[A-Za-z0-9+/=]+"', page):
+    if not re.search(r'<a class="brand" href="/"[^>]*><img[^>]*src="data:image/svg\+xml;base64,[A-Za-z0-9+/=]+"', page):
         return fail("the brand mark is not the embedded logo mark with no background")
     # The tab icon is the mark on a tile, never the bare mark: the landing page's tab shows the bare mark,
     # and two identical tabs could not be told apart (owner, 2026-10-06).
     tab = re.search(r'<link rel="icon" type="image/svg\+xml" href="data:image/svg\+xml;base64,([A-Za-z0-9+/=]+)"', page)
-    brand = re.search(r'<a class="brand" href="/"[^>]*><img src="data:image/svg\+xml;base64,([A-Za-z0-9+/=]+)"', page)
+    brand = re.search(r'<a class="brand" href="/"[^>]*><img[^>]*src="data:image/svg\+xml;base64,([A-Za-z0-9+/=]+)"', page)
     if not tab or tab.group(1) == brand.group(1):
         return fail("the tab icon is missing or is the bare header mark, the landing page's icon")
     if not re.search(r"\d+ cards?<", page) or not re.search(r"(\d+ working now|nothing running)<", page):

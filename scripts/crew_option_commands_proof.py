@@ -27,6 +27,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crew_card  # noqa: E402 - the owner profile, the base home and the package checkout
+from crew_proof_host import Host  # noqa: E402
 PKG = crew_card.package_dir() or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROFILE = os.environ.get("CREW_PROFILE") or crew_card.owner_home()
 HERMES_SRC = os.environ.get("HERMES_SRC") or crew_card.hermes_root()
@@ -66,23 +67,6 @@ def read(path):
             return fh.read()
     except OSError:
         return ""
-
-
-class Host:
-    """A stand-in for the plugin host's context: records what register() asks for."""
-
-    def __init__(self):
-        self.commands = {}
-        self.hooks = []
-
-    def register_command(self, name, handler, description="", args_hint="", **kw):
-        self.commands[name] = {"handler": handler, "description": description, "args_hint": args_hint}
-
-    def register_hook(self, name, fn):
-        self.hooks.append(name)
-
-    def register_skill(self, *a, **kw):
-        pass
 
 
 def load(path):

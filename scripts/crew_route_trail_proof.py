@@ -114,7 +114,7 @@ PANEL_JS = r"""
 
 
 def render(base, cdp, graph):
-    profile = tempfile.mkdtemp(prefix="crew-route-trail-")
+    profile = crew_proof_board.chrome_scratch("crew-route-trail-")
     url = "%s/card/%s#node=card:%s&tab=route" % (base, CARD, CARD)
     proc = subprocess.Popen([CHROME, "--headless=new", "--password-store=basic", "--disable-gpu", "--no-sandbox",
                              "--remote-debugging-port=%d" % cdp, "--user-data-dir=" + profile,

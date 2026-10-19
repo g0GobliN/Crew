@@ -1,0 +1,163 @@
+/* Board styles, ported unchanged from scripts/crew_dashboard/crew.css (the .page-board rules). The only edit: the old
+   `body.page-board` rule is the root element's `.page-board` rule, so the board lays out inside a host page too. */
+/* board page (ui-spec section 4): one-line header, crew bar, five fixed lanes, the desktop card */
+.page-board *{box-sizing:border-box}
+.page-board{margin:0;background:var(--crew-bg);color:var(--crew-text-1);
+  font:13px/1.45 var(--crew-font);-webkit-font-smoothing:antialiased;height:100%;display:flex;flex-direction:column;overflow:hidden}
+.page-board button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.page-board header{display:flex;align-items:center;gap:14px;padding:14px 18px 10px;flex:0 0 auto}
+.page-board h1{font-size:15px;margin:0;font-weight:600;letter-spacing:-.01em}
+/* LIVE: the server answers the poll - a green dot that pulses; amber and still once a poll fails */
+.page-board .badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:2px 9px 2px 7px;font-weight:700;
+  font-size:10px;letter-spacing:.08em;line-height:1.3;color:var(--crew-tone-running);
+  background:color-mix(in srgb, var(--crew-tone-running) 12%, transparent)}
+.page-board .badge i{width:7px;height:7px;border-radius:50%;background:var(--crew-tone-running);
+  animation:livepulse 1.6s ease-out infinite}
+@keyframes livepulse{0%{box-shadow:0 0 0 0 var(--crew-running-glow)}70%{box-shadow:0 0 0 6px transparent}
+  100%{box-shadow:0 0 0 0 transparent}}
+.page-board .badge.stale{color:var(--crew-tone-review);background:color-mix(in srgb, var(--crew-tone-review) 12%, transparent)}
+.page-board .badge.stale i{background:var(--crew-tone-review);animation:none}
+@media (prefers-reduced-motion: reduce){ .page-board .badge i{animation:none} }
+.page-board .meta{font-size:12px;color:var(--crew-text-3);white-space:nowrap}
+.page-board .meta.on{color:var(--crew-tone-running)}
+.page-board #when{font-size:11px;color:var(--crew-text-4);font-variant-numeric:tabular-nums}
+.page-board .stats{display:flex;gap:6px;font-size:11.5px;color:var(--crew-text-3)}
+.page-board .stats span{--tone:var(--crew-text-3);display:inline-flex;align-items:baseline;gap:4px;padding:2px 8px;border-radius:5px;
+  background:color-mix(in srgb, var(--tone) 12%, transparent);color:var(--tone)}
+.page-board .stats b{font-weight:600;font-variant-numeric:tabular-nums}
+.page-board .stats .running{--tone:var(--crew-tone-running)}
+.page-board .stats .blocked{--tone:var(--crew-tone-blocked)}
+.page-board .stats .done{--tone:var(--crew-tone-done)}
+.page-board .stats .none{--tone:var(--crew-text-4)}
+.page-board .stale{font-size:11px;color:var(--crew-tone-review)}
+.page-board .stale[hidden]{display:none}
+.page-board .dispatcher-down{margin:0 18px 8px;padding:7px 12px;border-radius:6px;font-size:12.5px;flex:0 0 auto;
+  color:var(--crew-tone-blocked);background:color-mix(in srgb, var(--crew-tone-blocked) 12%, transparent)}
+.page-board .dispatcher-down code{font:inherit;font-weight:600}
+.page-board .hright{margin-left:auto;display:flex;align-items:center;gap:14px;font-size:11px;color:var(--crew-text-4)}
+.page-board .hright .node{white-space:nowrap}
+.page-board .hright a{color:var(--crew-text-3)}
+.page-board .hright a:hover{color:var(--crew-text-1)}
+.page-board header{border-bottom:1px solid var(--crew-stroke-2)}
+.page-board .avatar{display:inline-grid;place-items:center;flex:0 0 auto;border-radius:999px;width:18px;height:18px;
+  font-size:9px;font-weight:600;background:color-mix(in srgb, var(--hue) 22%, transparent);color:var(--hue)}
+.page-board .avatar.face{border-radius:6px;object-fit:cover;background:none;padding:0;}
+/* a card's state: a chip tinted in its own tone */
+.page-board .schip{display:inline-flex;align-items:center;white-space:nowrap;border-radius:4px;padding:1px 6px;font-size:10px;
+  font-weight:500;background:color-mix(in srgb, var(--tone) 15%, transparent);color:var(--tone)}
+/* lanes */
+.page-board main{flex:1;min-height:0;display:flex;gap:10px;padding:12px 18px 16px;overflow-x:auto;align-items:stretch}
+.page-board .lane{display:flex;flex-direction:column;flex:1 1 264px;min-width:264px;max-width:340px;border-radius:8px;
+  padding:8px;background:var(--crew-fill-3);min-height:0}
+.page-board .lane.rail{flex:0 0 32px;min-width:32px;width:32px;align-items:center;gap:6px}
+.page-board .lane.rail .lt{writing-mode:vertical-rl;margin-top:4px}
+.page-board .lane.rail .ln{margin-top:2px}
+.page-board [data-toggle]{cursor:pointer}
+.page-board .lane.togglable:hover,.page-board .lane.togglable:focus-visible{background:var(--crew-fill-2,var(--crew-fill-3));outline:none}
+.page-board .lh{display:flex;flex:0 0 auto;align-items:center;gap:6px;height:20px;margin:0 4px 6px}
+.page-board .lh i{width:6px;height:6px;border-radius:50%;background:var(--tone)}
+.page-board .lt{font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.05em;color:var(--crew-text-3)}
+.page-board .ln{font-size:10px;color:var(--crew-text-4);font-variant-numeric:tabular-nums}
+.page-board .lbody{display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0;padding:1px}
+.page-board .more{font-size:11px;color:var(--crew-text-3);text-align:center;padding:6px;border:1px dashed var(--crew-stroke-1);
+  border-radius:6px;width:100%}
+.page-board .more:hover{color:var(--crew-text-1)}
+.page-board .empty{color:var(--crew-text-4);font-size:11px;padding:2px 4px}
+/* the card: the Hermes desktop kanban card anatomy */
+.page-board .card{position:relative;display:flex;flex-direction:column;gap:8px;border-radius:6px;padding:10px;
+  text-decoration:none;color:inherit;background:var(--crew-elevated);border:1px solid var(--crew-stroke-2);
+  border-left:2px solid var(--tone)}
+.page-board .card:hover{border-color:var(--crew-stroke-1);border-left-color:var(--tone)}
+.page-board .card .ti{font-size:13px;font-weight:500;line-height:1.35;color:var(--crew-text-1);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.page-board .card .su{font-size:11px;line-height:1.4;color:var(--crew-text-3);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.page-board .card .ft{display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:10px;color:var(--crew-text-3)}
+.page-board .card .ft .who{font-weight:500}
+.page-board .card .ft .r{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0;font-variant-numeric:tabular-nums}
+.page-board .card .ft .id{font-family:var(--crew-mono);color:var(--crew-text-4)}
+.page-board .ok{color:var(--crew-tone-running)}
+.page-board .bad{color:var(--crew-tone-blocked)}
+.page-board .warn{color:var(--crew-tone-review)}
+.page-board .dim{color:var(--crew-text-4)}
+/* motion means work: an arc sweeps the border of a live card; a quiet one crawls amber; reduced motion = ring */
+@property --crew-arc{syntax:"<angle>";inherits:false;initial-value:0deg}
+.page-board .card.live::after,.page-board .card.quiet::after{content:"";position:absolute;inset:-1px;border-radius:7px;
+  padding:1px;pointer-events:none;
+  background:conic-gradient(from var(--crew-arc), transparent 0 70%, var(--arc) 88%, transparent 100%);
+  -webkit-mask:linear-gradient(currentColor 0 0) content-box,linear-gradient(currentColor 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(currentColor 0 0) content-box exclude,linear-gradient(currentColor 0 0);
+  animation:crewarc var(--arc-s) linear infinite}
+.page-board .card.live{--arc:var(--crew-tone-running);--arc-s:2.2s}
+.page-board .card.quiet{--arc:var(--crew-tone-review);--arc-s:6s}
+@keyframes crewarc{to{--crew-arc:360deg}}
+@media (prefers-reduced-motion: reduce){
+  .page-board .card.live::after,.page-board .card.quiet::after{animation:none;background:var(--arc)}
+}
+.page-board #bellwrap{position:relative;display:inline-flex;align-items:center}
+.page-board .bell{position:relative;display:inline-flex;align-items:center;gap:6px;background:var(--crew-fill-1);
+  color:var(--crew-text-2);border:1px solid var(--crew-stroke-1);border-radius:6px;padding:3px 7px;font:inherit;
+  cursor:pointer;line-height:0}
+.page-board .bell:hover{border-color:var(--crew-tone-ready)}
+.page-board .bell.waiting{border-color:var(--crew-tone-review);color:var(--crew-text-1)}
+.page-board .bell .n{background:var(--crew-stroke-1);color:var(--crew-text-3);border-radius:9px;font-weight:700;font-size:10px;
+  padding:0 5px;line-height:14px}
+.page-board .bell.waiting .n{background:var(--crew-tone-blocked);color:var(--crew-bg)}
+.page-board #notes{position:absolute;right:0;top:27px;z-index:40;width:560px;max-width:86vw;max-height:70vh;
+  overflow:auto;background:var(--crew-bg);border:1px solid var(--crew-stroke-1);border-radius:8px;
+  box-shadow:0 10px 28px var(--crew-shadow);padding:8px 9px}
+.page-board #notes[hidden]{display:none}
+.page-board .nh{display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--crew-text-3);
+  font-size:10px;text-transform:uppercase;letter-spacing:.1em;margin:2px 2px 7px}
+.page-board .nh b{color:var(--crew-text-1)}
+.page-board .nh button,.page-board #noterows button{background:var(--crew-fill-1);color:var(--crew-text-2);border:1px solid var(--crew-stroke-1);
+  border-radius:4px;font:inherit;font-size:10px;padding:1px 8px;cursor:pointer}
+.page-board .nh button:hover,.page-board #noterows button:hover{border-color:var(--crew-tone-ready)}
+.page-board #notes .empty{color:var(--crew-text-4);font-size:11px;padding:2px}
+.page-board .ar{display:flex;align-items:center;gap:10px;background:var(--crew-elevated);border:1px solid var(--crew-stroke-1);
+  border-left:3px solid var(--crew-tone-neutral);border-radius:6px;padding:5px 9px;margin-bottom:5px;font-size:11px}
+.page-board .ar.stuck{border-left-color:var(--crew-tone-blocked)}
+.page-board .ar a.t{color:var(--crew-text-1);text-decoration:none;flex:1;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.page-board .ar a.t:hover{color:var(--crew-tone-ready)}
+.page-board .ar .st{font-weight:700;width:56px}
+.page-board .ar.stuck .st{color:var(--crew-tone-blocked)}
+.page-board .ar .st{color:var(--crew-tone-neutral)}
+.page-board .ar .w,.page-board .ar .ag{color:var(--crew-text-3);white-space:nowrap}
+.page-board .ar button{background:var(--crew-fill-1);color:var(--crew-text-2);border:1px solid var(--crew-stroke-1);border-radius:4px;
+  font:inherit;font-size:10px;padding:1px 8px;cursor:pointer}
+.page-board .ar button:hover{border-color:var(--crew-tone-ready)}
+.page-board .tailnet{color:var(--crew-tone-ready)}
+
+.page-board header a.brand{display:inline-flex;align-items:center;flex:0 0 auto;border-radius:6px}
+.page-board header a.brand img{display:block;width:18px;height:18px}
+.page-board header a.brand:hover{background:var(--crew-fill-1)}
+.page-board header a.brand:focus-visible{outline:2px solid var(--crew-tone-ready);outline-offset:2px}
+
+/* narrow (the Desktop main pane beside the flow pane): the title never wraps or vanishes; the header's least
+   important facts step aside by width and stay in the DOM */
+.page-board header{container-type:inline-size;container-name:crewhead;}
+@container crewhead (max-width:900px){
+  .page-board header > *{flex-shrink:0;}
+  .page-board header > h1{flex-shrink:1;min-width:5.5em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+}
+@container crewhead (max-width:900px){ .page-board #when{display:none;} }
+@container crewhead (max-width:760px){ .page-board #cards{display:none;} }
+@container crewhead (max-width:620px){ .page-board #live{display:none;} }
+@container crewhead (max-width:520px){ .page-board .stats .none{display:none;} }
+
+/* Desktop only: the switch that brings the app's own Kanban row back (Board.tsx, host.kanbanRow). */
+.page-board .kswitch{display:inline-flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap;color:var(--crew-text-3)}
+.page-board .kswitch:hover{color:var(--crew-text-1)}
+.page-board .kswitch input{position:absolute;opacity:0;width:0;height:0}
+.page-board .kswitch i{position:relative;width:24px;height:14px;border-radius:7px;background:var(--crew-stroke-1);transition:background .15s}
+.page-board .kswitch i::after{content:"";position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--crew-bg);transition:transform .15s}
+.page-board .kswitch input:checked + i{background:var(--crew-tone-running)}
+.page-board .kswitch input:checked + i::after{transform:translateX(10px)}
+.page-board .kswitch input:focus-visible + i{outline:2px solid var(--crew-tone-ready);outline-offset:2px}
+
+/* Desktop only: the command row under a tile's chips (TileActions draws nothing in the browser) */
+.page-board .card .tact{display:flex;flex-direction:column;gap:4px;cursor:default}
+.page-board .card .tbtns{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.page-board .card .tmsg{font-size:10px;line-height:1.4;color:var(--crew-text-2);overflow-wrap:anywhere}
+.page-board .card .tmsg.bad{color:var(--crew-tone-blocked)}

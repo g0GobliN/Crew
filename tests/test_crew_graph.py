@@ -210,6 +210,7 @@ class SessionTextTests(unittest.TestCase):
             ("s1", "assistant", "   ", None),                      # whitespace is not text
             ("s1", "assistant", "Second thought: the guess has to go.", None),
             ("s2", "assistant", "another run's words", None),
+            ("s3", "assistant", "Plan:\n\n\n- one\n- two  \n\n```py\nprint(1)\n```\n", None),
         ]
         for sid, role, content, tc in rows:
             db.execute("insert into messages (session_id, role, content, tool_calls, timestamp) "
@@ -233,6 +234,13 @@ class SessionTextTests(unittest.TestCase):
         self.assertEqual(["Reading the card, then I will patch the reader.",
                           "Second thought: the guess has to go."], [l["text"] for l in lines])
         self.assertIn("ts", lines[0])
+
+    def test_raw_keeps_the_newlines_and_text_stays_flat(self):
+        line = cg.load_session_text(self.state, "s3")[0]
+        self.assertEqual("Plan: - one - two ```py print(1) ```", line["text"])
+        self.assertEqual("Plan:\n\n- one\n- two\n\n```py\nprint(1)\n```", line["raw"])
+        # a one-line message has nothing to add: no raw, so the browser payload does not double
+        self.assertNotIn("raw", cg.load_session_text(self.state, "s2")[0])
 
     def test_a_tool_only_message_and_a_result_are_dropped(self):
         texts = [l["text"] for l in cg.load_session_text(self.state, "s1")]

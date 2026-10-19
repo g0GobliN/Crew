@@ -12,7 +12,9 @@ The guard is `crew_tool_guard` in the crew plugin. Three things are proved, each
 Verdict lines are written to a scratch home through crew_card.record_verdict (nothing is stubbed but the card
 row); no kanban call is made and the live board is never read. Exit 0 only when every row behaves.
 """
+import atexit
 import importlib.util
+import shutil
 import json
 import os
 import sqlite3
@@ -45,6 +47,7 @@ def action(res):
 
 def main():
     scratch = tempfile.mkdtemp(prefix="crew-quadrants-")
+    atexit.register(shutil.rmtree, scratch, ignore_errors=True)
     home = os.path.join(scratch, "home")
     os.makedirs(os.path.join(home, "profiles", "crew-verifier"))
     db = os.path.join(scratch, "kanban.db")

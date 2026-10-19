@@ -14,6 +14,7 @@ HERMES_BIN at a wrapper that resets HERMES_HOME, see crew_coordinator_proof.py.
 """
 import atexit
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -46,6 +47,67 @@ def find_chrome():
                 if os.path.isfile(path):
                     return path
     return ""
+
+
+SOCKET_TAIL = "/com.google.Chrome.XXXXXX/SingletonSocket"
+SOCKET_LIMIT = 100  # AF_UNIX paths hold 107 bytes; keep a margin
+
+
+def chrome_scratch(prefix="crew-chrome-"):
+    """A throwaway directory for one Chrome run (profile, cache, and the TMPDIR Chrome puts its SingletonSocket
+    under) whose socket path fits the AF_UNIX limit. A long TMPDIR (the nightly cron's is the profile's
+    cache/scratch folder, 59 chars) plus the proof's own folder pushed the socket path past 107 characters and
+    Chrome exited -6 ("zygote ... Broken pipe"). On POSIX a base that would not fit falls back to /tmp; Windows
+    has no such limit and keeps the system temp dir. Callers remove the directory themselves."""
+    import tempfile
+    base = tempfile.gettempdir()
+    if os.name == "posix" and len(base) + 1 + len(prefix) + 8 + len(SOCKET_TAIL) >= SOCKET_LIMIT:
+        base = "/tmp"
+    return tempfile.mkdtemp(prefix=prefix, dir=base)
+
+
+def _dom_once(chrome, url, budget_ms, width, height):
+    """One headless Chrome --dump-dom run in a throwaway profile; (dom, why it is empty or '')."""
+    scratch = chrome_scratch("crew-dom-")
+    try:
+        env = dict(os.environ, XDG_CACHE_HOME=os.path.join(scratch, "cache"), TMPDIR=scratch)
+        done = subprocess.run(
+            [chrome, "--headless=new", "--no-sandbox", "--disable-gpu", "--password-store=basic",
+             "--user-data-dir=" + os.path.join(scratch, "profile"), "--window-size=%d,%d" % (width, height),
+             "--virtual-time-budget=%d" % budget_ms, "--dump-dom", url],
+            env=env, capture_output=True, timeout=90, stdin=subprocess.DEVNULL)
+        dom = done.stdout.decode("utf-8", "replace")
+        if not dom.strip():
+            return "", "chrome exit %s, no output: %s" % (done.returncode, done.stderr.decode("utf-8", "replace")[-200:].strip())
+        return dom, ""
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "", "chrome did not run: %s" % exc
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def render_dom(url, budget_ms=8000, width=1400, height=1000, tries=3):
+    """The DOM of `url` after the page's script ran, as serialized HTML: headless Chrome's --dump-dom. The dashboard is
+    a React app now (a thin shell plus /app.js), so a proof that reads page markup reads this, not the HTTP body.
+    `budget_ms` of virtual time lets the first poll answer and the page settle. Chrome gets a throwaway profile and
+    cache of its own, removed afterwards. "" when there is no Chrome or it fails.
+
+    A loaded box (the nightly shares it with the dispatcher and other agents) sometimes lets Chrome come back empty or
+    with the shell undrawn: the app's first fetch answered after the virtual budget. That is the box, not the page, so
+    an empty or undrawn answer is asked again (a longer budget each time) before it counts; the reason is written to
+    stderr when every try came back empty, so a nightly failure names it instead of showing a blank page."""
+    chrome = find_chrome()
+    if not chrome:
+        return ""
+    dom, why = "", ""
+    for n in range(max(1, tries)):
+        dom, why = _dom_once(chrome, url, budget_ms * (n + 1), width, height)
+        if dom and not re.search(r"data-crew-shell(=\"\")?></div>", dom):
+            return dom
+        if dom:
+            why = "the shell was never drawn (budget %d ms)" % (budget_ms * (n + 1))
+    print("render_dom %s: %s after %d tries" % (url, why, max(1, tries)), file=sys.stderr)
+    return dom
 
 
 def _hermes_python(root):
@@ -177,7 +239,7 @@ def proof_db(name=None):
     return require_proof_board(name)
 
 
-def _free_port():
+def free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
@@ -186,17 +248,11 @@ def _free_port():
 _SERVERS = []
 
 
-def graph_base(timeout=30):
-    """The served dashboard a proof reads over HTTP: CREW_GRAPH_BASE / CREW_GRAPH_URL when the caller
-    names one, else a server of its own on a free port reading the proofs board (stopped at exit).
-    Never the live server on :8799, which reads the live board and so can not see a proof's seed."""
-    given = (os.environ.get("CREW_GRAPH_BASE") or os.environ.get("CREW_GRAPH_URL") or "").strip()
-    if given:
-        return given.rstrip("/")
-    db = require_proof_board()
-    port = _free_port()
-    # the dashboard keeps the owner's cleared notifications in a file under the home: a proof that clears
-    # rows must do it in a file of its own, never the owner's
+def start_graph(db, timeout=30):
+    """A dashboard server of this tree's own on a free port reading the kanban file `db` (stopped at exit); its base
+    URL. The dashboard keeps the owner's cleared notifications in a file under the home: a proof that clears rows
+    must do it in a file of its own, never the owner's, so the ack file sits beside `db` unless CREW_ACK_FILE names one."""
+    port = free_port()
     env = dict(os.environ, CREW_GRAPH_PORT=str(port), CREW_GRAPH_BIND="127.0.0.1",
                KANBAN_DB=db, HERMES_KANBAN_DB=db,
                CREW_ACK_FILE=os.environ.get("CREW_ACK_FILE") or os.path.join(
@@ -209,15 +265,24 @@ def graph_base(timeout=30):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
-            raise SystemExit("graph server for the proofs board exited %s" % proc.returncode)
+            raise SystemExit("graph server for %s exited %s" % (db, proc.returncode))
         try:
             urllib.request.urlopen(base + "/", timeout=2).read(1)
-            break
+            return base
         except Exception:  # noqa: BLE001 - not listening yet
             time.sleep(0.2)
-    else:
-        stop_servers()
-        raise SystemExit("graph server for the proofs board did not answer in %ss" % timeout)
+    stop_servers()
+    raise SystemExit("graph server for %s did not answer in %ss" % (db, timeout))
+
+
+def graph_base(timeout=30):
+    """The served dashboard a proof reads over HTTP: CREW_GRAPH_BASE / CREW_GRAPH_URL when the caller
+    names one, else a server of its own on a free port reading the proofs board (stopped at exit).
+    Never the live server on :8799, which reads the live board and so can not see a proof's seed."""
+    given = (os.environ.get("CREW_GRAPH_BASE") or os.environ.get("CREW_GRAPH_URL") or "").strip()
+    if given:
+        return given.rstrip("/")
+    base = start_graph(require_proof_board(), timeout)
     os.environ["CREW_GRAPH_BASE"] = os.environ["CREW_GRAPH_URL"] = base
     return base
 

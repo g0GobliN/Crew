@@ -1,0 +1,37 @@
+/* Desktop splash: the crew mark, an eyebrow and one headline in the landing page's faces, over the page area.
+   Colours are the --crew-* ladder, so a light and a dark host both read. The overlay is the page root's own box
+   (position:absolute; inset:0 on the relative .crew-scope), so it fills exactly the route area, and the block sits in
+   its middle on both axes.
+   Motion: CSS keyframes only (transform and opacity), the landing page's easings (.3,.9,.2,1 settle; .3,1.6,.4,1 overshoot),
+   under prefers-reduced-motion: no-preference and the sp-anim class. Timeline: mark 0-.55 s, rule .25-.6, eyebrow text
+   .55-.85, words You .6, ask .75, once. .9 (each .4 s, the last overshoots), hold, overlay fade .3 s (Splash.tsx MIN_MS). */
+.crew-splash{position:absolute; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+  background:var(--crew-bg); color:var(--crew-fg); opacity:1; container-type:size}
+.crew-splash[data-out="1"]{opacity:0; pointer-events:none}
+.crew-splash .sp-in{display:flex; flex-direction:column; align-items:flex-start; gap:18px; padding:0 32px; max-width:100%}
+.crew-splash .sp-mark{width:44px; height:44px; display:block}
+.crew-splash .sp-eyebrow{display:flex; align-items:center; gap:12px; font-family:CrewMono,var(--crew-mono); font-weight:500; font-size:11px;
+  letter-spacing:.07em; text-transform:uppercase; color:var(--crew-tone-running)}
+.crew-splash .sp-eyebrow s{width:36px; height:1px; flex:0 0 36px; background:var(--crew-tone-running); text-decoration:none}
+.crew-splash .sp-foot{position:absolute; left:0; right:0; bottom:88px; text-align:center; font-family:CrewMono,var(--crew-mono); font-weight:500;
+  font-size:13px; letter-spacing:.07em; color:var(--crew-text-3)}
+.crew-splash .sp-title{margin:0; font-family:CrewArchivo,var(--crew-font); font-weight:900; font-size:clamp(32px,10cqw,96px);
+  letter-spacing:-.055em; line-height:.9; white-space:nowrap; color:var(--crew-fg)}
+.crew-splash .sp-title em{font-style:normal; color:var(--crew-tone-running)}
+.crew-splash .sp-w{display:inline-block}
+@media (prefers-reduced-motion: no-preference){
+  .crew-splash.sp-anim{transition:opacity .3s ease}
+  .crew-splash.sp-anim .sp-mark{animation:crew-sp-mark .55s cubic-bezier(.3,.9,.2,1) both}
+  .crew-splash.sp-anim .sp-eyebrow s{transform-origin:0 50%; animation:crew-sp-rule .35s cubic-bezier(.3,.9,.2,1) .25s both}
+  .crew-splash.sp-anim .sp-eb{animation:crew-sp-fade .3s ease .55s both}
+  /* the footer comes last, after 'once.' has landed (.9s + .4s), inside the same 1.3 s window: nothing gets longer */
+  .crew-splash.sp-anim .sp-foot{animation:crew-sp-fade .25s ease 1.05s both}
+  .crew-splash.sp-anim .sp-w1{animation:crew-sp-word .4s cubic-bezier(.3,.9,.2,1) .6s both}
+  .crew-splash.sp-anim .sp-w2{animation:crew-sp-word .4s cubic-bezier(.3,.9,.2,1) .75s both}
+  .crew-splash.sp-anim .sp-w3{animation:crew-sp-last .4s cubic-bezier(.3,1.6,.4,1) .9s both}
+}
+@keyframes crew-sp-mark{from{opacity:0; transform:scale(.6)} 60%{opacity:1; transform:scale(1.06)} to{opacity:1; transform:scale(1)}}
+@keyframes crew-sp-rule{from{transform:scaleX(0)} to{transform:scaleX(1)}}
+@keyframes crew-sp-fade{from{opacity:0} to{opacity:1}}
+@keyframes crew-sp-word{from{opacity:0; transform:translateY(.4em)} to{opacity:1; transform:none}}
+@keyframes crew-sp-last{from{opacity:0; transform:translateY(.5em)} to{opacity:1; transform:none}}

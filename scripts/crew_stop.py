@@ -361,7 +361,9 @@ def stop_card(card, dry=False, archive=False):
     return lines, ok, facts
 
 
-def main(argv=None):
+def run(argv=None):
+    """The whole stop pass as (exit code, the text it prints). main() prints it; the Hermes Desktop action route
+    (dashboard/plugin_api.py) returns the same text to its button."""
     ap = argparse.ArgumentParser(description="Stop crew work: park the card, keep its history.")
     ap.add_argument("card", nargs="?", help="one card id; without it every open crew card is parked")
     ap.add_argument("--archive", action="store_true",
@@ -374,39 +376,42 @@ def main(argv=None):
     if args.archive and not args.card:
         ap.error("--archive drops a card for good: name the card (the all-cards form only parks)")
     if not os.path.exists(KANBAN_DB):
-        print("no board at %s" % KANBAN_DB)
-        return 2
+        return 2, "no board at %s" % KANBAN_DB
     cards = q("select id, status, assignee, title, body from tasks")
     if args.card:
         targets = stop_targets([dict(c) for c in cards], args.card)
         if not targets:
-            print("no such card: %s" % args.card)
-            return 3
+            return 3, "no such card: %s" % args.card
     else:
         targets = stop_targets([dict(c) for c in cards])
     if not targets:
         # a dry run says so even when there is nothing to do, so the caller can see which mode answered
-        print("stop%s: nothing to stop (0 card(s) open)" % (" (dry run)" if args.dry_run else ""))
-        return 0
+        return 0, "stop%s: nothing to stop (0 card(s) open)" % (" (dry run)" if args.dry_run else "")
 
-    results, fails = [], []
+    out, results, fails = [], [], []
     mode = "dry run" if args.dry_run else "stop"
     if not args.quiet:
-        print("crew stop - %s  %d card(s)%s" % (mode, len(targets), "  (--dry-run)" if args.dry_run else ""))
+        out.append("crew stop - %s  %d card(s)%s" % (mode, len(targets), "  (--dry-run)" if args.dry_run else ""))
     for card in targets:
         lines, ok, facts = stop_card(card, args.dry_run, args.archive)
         results.append(facts)
         if not ok:
             fails.append(card["id"])
         if not args.quiet or not ok:
-            print("\n".join(lines))
+            out.append("\n".join(lines))
     killed = sum(len(f["runs_killed"]) for f in results)
     closed = sum(len(f["sessions_closed"]) for f in results)
-    print("stop: %d card(s), %d run(s) killed, %d session(s) closed%s"
-          % (len(results), killed, closed, "  (%d came back!)" % len(fails) if fails else ""))
+    out.append("stop: %d card(s), %d run(s) killed, %d session(s) closed%s"
+               % (len(results), killed, closed, "  (%d came back!)" % len(fails) if fails else ""))
     if args.json:
-        print(json.dumps({"mode": mode, "cards": results, "came_back": fails}, indent=2))
-    return 1 if fails else 0
+        out.append(json.dumps({"mode": mode, "cards": results, "came_back": fails}, indent=2))
+    return (1 if fails else 0), "\n".join(out)
+
+
+def main(argv=None):
+    code, text = run(argv)
+    print(text)
+    return code
 
 
 if __name__ == "__main__":

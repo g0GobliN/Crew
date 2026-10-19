@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Always-on crew surface over HTTP (tailnet-friendly).
 
-  /                 the board: the Hermes kanban as columns, with the role working each card
+  /                 the page: a thin shell that loads /app.js (the React app: board, card page, flow graph)
+  /app.js           the app, built from ui/src (crew_dashboard/app.js)
+  /board            the same shell; the app reads location.pathname (/, /card/<id>) and ?all=1
   /board.json       the same board data, polled every 2s by the page; carries attention.rows
   POST /ack/<id>    clear ONE notification off the list (?undo=1 restores it)
   POST /ack/all     clear every listed notification at once (?undo=1 restores them); both writes go
                     into <dir of the board's kanban.db>/crew/attention_acks.json (CREW_ACK_FILE overrides) - never into the board. POST only, and
                     only from a same-origin page: a GET answers 405, a cross-site Origin answers 403.
-  /card/<id>        live flow graph for one card (polls /card/<id>.json every 2s)
+  /card/<id>        the same shell, showing one card's live flow graph (polls /card/<id>.json every 2s)
   /card/<id>.json   the graph, rebuilt per request
   /healthz          text probe
 
@@ -16,17 +18,15 @@ Bind address and port come from CREW_GRAPH_BIND / CREW_GRAPH_PORT.
 
 The Host header must name this server: 127.0.0.1 / localhost / [::1] on the bound port, or a name listed in
 CREW_GRAPH_HOSTS (comma list, e.g. the tailnet name; a bare name or name:port) - anything else answers 421,
-which closes the DNS-rebinding route to the board. Every HTML response carries a strict CSP with a
-per-response script nonce.
+which closes the DNS-rebinding route to the board. Every HTML response carries a strict CSP: this origin
+only, no inline script.
 """
 import importlib.util
 import json
 import os
 import platform
-import html as _html
 import random
 import re
-import secrets
 import sys
 import subprocess
 import threading
@@ -63,15 +63,6 @@ def load_graph_module():
 
 
 CG = load_graph_module()
-
-
-def esc(text):
-    return _html.escape(str(text), quote=True)
-
-
-def js_data(obj):
-    """obj as a JS literal that cannot close the surrounding <script> (< > & become \\u escapes)."""
-    return CG._js_safe(obj)
 
 
 # The board's own rule for the proof suite's scaffolding: a card titled PROBE/TEST is the suite's
@@ -242,10 +233,15 @@ def board_data(include_all=False, older=False):
             budget = tile_budget(t["id"])
             if budget:
                 t["budget"] = budget
+            # the Desktop action buttons on the tile (Proof) are enabled by the same question the card page reads
+            # (a file read per card, so only where the question can wait: a blocked or triage card)
+            t["proof_ask"] = CG.proof_ask_kind(t["id"]) if t["status"] in STUCK else ""
     counts = {}
     for t in tiles:
         counts[t["status"]] = counts.get(t["status"], 0) + 1
     return {"generated_at": int(now), "node": platform.node(),
+            # the board page header draws these two in the browser; the React page reads them from here instead
+            "board": CG.crew_card.board_slug(), "dashboard_url": CG.crew_card.dashboard_url(),
             "live": sum(1 for t in tiles if t["active"]), "lanes": lanes, "counts": counts,
             "cards": len(tiles), "test_cards": len(test_cards),
             "attention": attention_data(db, tiles, now),
@@ -408,105 +404,27 @@ def ack_all(undo=False):
     return 200, "cleared %d row(s)\n" % len(cards)
 
 
-# The bell is an inline SVG, so the page stays self-contained (no external asset, no icon font).
-BELL_SVG = ("<svg width=15 height=15 viewBox='0 0 24 24' aria-hidden=true fill=currentColor>"
-            "<path d='M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32"
-            "V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1"
-            "l-2-2z'/></svg>")
+# The page every browser route serves: a thin shell. The board, the card page and the flow graph are the React app in
+# crew_dashboard/app.js (built from ui/src by ui/build.mjs); it reads location.pathname for its route and polls the
+# JSON routes below. No inline script, so the CSP below needs no nonce.
+APP_JS = os.path.join(HERE, "crew_dashboard", "app.js")
+CARD_PAGE_RX = re.compile(r"^/card/[A-Za-z0-9_-]+/?$")
 
 
-def board_page(include_all=False, nonce=None):
-    data = board_data(include_all)
-    css = CG.dashboard_asset("tokens.css", "crew.css")
-    if data.get("error"):
-        return ("<!doctype html><meta charset=utf-8><title>crew board</title>%s<style>%s</style>"
-                "<body class=page-board><main>crew board: cannot read the board (%s)</main>"
-                % (CG.favicon_link(), css, esc(data["error"])))
-    return ("<!doctype html><html><head><meta charset=utf-8>"
+def shell_page():
+    return ("<!doctype html><html lang=en><head><meta charset=utf-8>"
             "<meta name=viewport content='width=device-width, initial-scale=1'><title>Crew</title>"
-            "%s<style>%s</style></head><body class=page-board>"
-            # One header line, the information the board always carried (owner, 2026-10-01: "use the info we
-            # had before but in the nice design"): the LIVE badge (its green dot pulses while the server
-            # answers the poll, amber once a poll fails), the card count, how many are working now,
-            # the status counts, when it last updated, the bell and the board's own link (crew_card.dashboard_url). The counts are
-            # server-rendered so the page reads right before any script; a failed poll shows "stale since".
-            "<header>%s<span class=badge id=badge title='the board server answers'><i></i>LIVE</span><h1>crew board</h1>"
-            "<span class=meta id=cards>%s</span><span class=meta id=live>%s</span>"
-            "<div class=stats id=counts>%s</div>"
-            "<span class=meta id=when></span><span class=stale id=stale hidden></span>"
-            "<span class=hright><span id=bellwrap><button id=bell class=bell aria-label='notifications' "
-            "title='%s'>%s<span class=n id=belln>%d</span></button>"
-            "<div id=notes hidden><div class=nh><span id=notehead>%s</span>"
-            "<button id=clearall title='clear every listed row'>clear all</button></div>"
-            "<div id=noterows></div></div></span>"
-            "<span class=node>%s - kanban%s <a class=tailnet href='%s/'>link</a>"
-            "</span></span></header>"
-            # The warning strip board.js fills when the gateway (the kanban dispatcher) is not running.
-            "<div class=dispatcher-down id=dispatcher-down role=alert hidden></div>"
-            "<main id=board></main>"
-            # The helpers that draw a lane live at the END of the script body, so the first paint has
-            # to come after them: a `draw(INIT)` placed before board.js ran with no helpers defined
-            # yet, and the thrown error left the board empty.
-            "<script%s>var INIT=%s;%s;draw(INIT);</script></body></html>"
-            % (CG.favicon_link(), css, CG.logo_link(), cards_word(data.get("cards")), live_word(data.get("live")),
-               board_counts(data.get("counts")), notes_hint(data.get("attention")),
-               BELL_SVG, notes_total(data.get("attention")), attention_head(data.get("attention")),
-               esc(platform.node()), board_label(), esc(CG.crew_card.dashboard_url()),
-               (' nonce="%s"' % esc(nonce)) if nonce else "", js_data(data),
-               CG.dashboard_asset("lib.js", "board.js")))
+            "%s</head><body><div id=crew-app data-crew-shell></div><script src=/app.js></script></body></html>"
+            % CG.favicon_link())
 
 
-# The header's status counts, one owner for the page and the script: (tone class, word, statuses).
-HEADER_COUNTS = (("running", "running", ("running",)), ("blocked", "blocked", ("blocked", "triage")),
-                 ("done", "done", ("done",)))
-
-
-def board_label():
-    """' <slug>' after 'kanban' in the header when the active board is not the default one, else ''."""
-    slug = CG.crew_card.board_slug()
-    return "" if slug == CG.crew_card.DEFAULT_BOARD else " " + esc(slug)
-
-
-def cards_word(n):
-    n = int(n or 0)
-    return "%d card%s" % (n, "" if n == 1 else "s")
-
-
-def live_word(n):
-    n = int(n or 0)
-    return ("%d working now" % n) if n else "nothing running"
-
-
-def board_counts(counts):
-    """The header's counts: running, blocked, done - server-rendered, redrawn by the script; a count above
-    zero takes its state's tone."""
-    counts = counts or {}
-    out = []
-    for tone, word, statuses in HEADER_COUNTS:
-        n = sum(int(counts.get(s) or 0) for s in statuses)
-        out.append("<span class='%s%s'><b>%d</b>%s</span>" % (tone, "" if n else " none", n, word))
-    return "".join(out)
-
-
-def attention_head(att):
-    """Server-rendered heading of the notification panel: reads right before any script runs."""
-    att = att or {}
-    return "needs you - <b>%d</b> stuck - <b>%d</b> done" % (int(att.get("stuck") or 0),
-                                                           int(att.get("done") or 0))
-
-
-def notes_total(att):
-    """The number on the bell: every row the panel would show."""
-    att = att or {}
-    total = att.get("total")
-    if total is None:
-        total = int(att.get("stuck") or 0) + int(att.get("done") or 0)
-    return int(total)
-
-
-def notes_hint(att):
-    total = notes_total(att)
-    return ("%d waiting - click for the list" % total) if total else "nothing waiting"
+def app_js():
+    """The bytes of crew_dashboard/app.js, or None when the file is missing (a broken install answers 404)."""
+    try:
+        with open(APP_JS, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
 
 
 def allowed_hosts(port):
@@ -600,11 +518,12 @@ def role_face(role):
         return faces[role]
 
 
-def csp(nonce):
-    """The page policy: nothing but this origin; scripts only with the response's own nonce."""
-    return ("default-src 'self'; script-src 'self'%s; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; "
-            "frame-ancestors 'none'" % ((" 'nonce-%s'" % nonce) if nonce else ""))
+# The page policy: nothing but this origin, and scripts only from it (the shell has no inline script). The app
+# puts its stylesheets into the page as <style> elements, so style-src keeps 'unsafe-inline'; img-src allows the
+# data: URL of the tab icon.
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+       "frame-ancestors 'none'")
 
 
 def board_json(show_all=False, older=False):
@@ -623,24 +542,21 @@ def face_svg(role):
         return None
 
 
-def card_response(rest, nonce):
-    """(code, body, content type) for /card/<rest>: the page, or with a .json suffix the graph JSON.
-    One owner for the standalone server and the dashboard plugin."""
-    if rest.endswith(".json"):
-        graph, err = CG.build_graph(rest[:-len(".json")])
-        if err:
-            return 404, json.dumps({"error": err}), "application/json"
-        return 200, json.dumps(graph), "application/json"
-    graph, err = CG.build_graph(rest)
+def card_response(rest):
+    """(code, body, content type) for /card/<rest>.json: the card's graph JSON. Anything else under /card/ is the
+    app's page (the shell), not this function's. One owner for the standalone server and the dashboard plugin."""
+    if not rest.endswith(".json"):
+        return 404, "not found\n", "text/plain; charset=utf-8"
+    graph, err = CG.build_graph(rest[:-len(".json")])
     if err:
-        return 404, "no graph for %s (%s)" % (esc(rest), esc(err)), "text/html; charset=utf-8"
-    return 200, CG.render_html(graph, "/card/%s.json" % rest, nonce), "text/html; charset=utf-8"
+        return 404, json.dumps({"error": err}), "application/json"
+    return 200, json.dumps(graph), "application/json"
 
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "crew-graph"
 
-    def _send(self, code, body, ctype, nonce=None, extra=()):
+    def _send(self, code, body, ctype, extra=()):
         raw = body.encode("utf-8") if isinstance(body, str) else body
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -649,7 +565,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         if ctype.startswith("text/html"):
-            self.send_header("Content-Security-Policy", csp(nonce))
+            self.send_header("Content-Security-Policy", CSP)
         for k, v in extra:
             self.send_header(k, v)
         self.end_headers()
@@ -708,9 +624,20 @@ class Handler(BaseHTTPRequestHandler):
                 body = "ok crew board (no data; the reason is in the crew log)\n"
             return self._send(200, body, "text/plain; charset=utf-8")
         show_all = "all=1" in (urlparse(self.path).query or "")
-        nonce = secrets.token_urlsafe(16)
         if path in ("/", "/index.html", "/board"):
-            return self._send(200, board_page(show_all, nonce), "text/html; charset=utf-8", nonce)
+            return self._send(200, shell_page(), "text/html; charset=utf-8")
+        if CARD_PAGE_RX.match(path):
+            # the shell for a card that exists; an id that names no card is a 404 here, not a page that fails to load
+            card_id = path[len("/card/"):].strip("/")
+            _graph, err = CG.build_graph(card_id)
+            if err:
+                return self._send(404, "no graph for %s (%s)\n" % (card_id, err), "text/plain; charset=utf-8")
+            return self._send(200, shell_page(), "text/html; charset=utf-8")
+        if path == "/app.js":
+            js = app_js()
+            if js is None:
+                return self._send(404, "not found\n", "text/plain; charset=utf-8")
+            return self._send(200, js, "text/javascript; charset=utf-8")
         if path in ("/board.json", "/index.json"):
             older = "older=1" in (urlparse(self.path).query or "")
             return self._send(200, board_json(show_all, older), "application/json")
@@ -723,8 +650,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, "not found\n", "text/plain; charset=utf-8")
             return self._send(200, svg, "image/svg+xml")
         if path.startswith("/card/"):
-            code, body, ctype = card_response(path[len("/card/"):], nonce)
-            return self._send(code, body, ctype, nonce if ctype.startswith("text/html") else None)
+            code, body, ctype = card_response(path[len("/card/"):])
+            return self._send(code, body, ctype)
         return self._send(404, "not found\n", "text/plain; charset=utf-8")
 
     def log_message(self, fmt, *args):

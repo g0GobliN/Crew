@@ -637,6 +637,12 @@ def coordinator_id(session=None):
     return "%s/%s" % (current_profile(), sid or "no-session")
 
 
+# The pointer a Hermes Desktop chat message ends with: chat cannot open an in-app route and Windows runs no dashboard
+# server, so Desktop gets this plain line instead of a Crew Dashboard URL. One text for the card-open reply
+# (__init__._link_line) and the watcher's ending message (crew_notify._text with md=True).
+DESKTOP_LINE = "Open it in Crew: the Crew entry in the sidebar, or preview it with Ctrl+J"
+
+
 def origin_id(value):
     """The chat that opened the card, `<platform>:<chat id>` (Zulip: `zulip:stream:<s>|<topic>`),
     kept verbatim. Only an explicit --origin sets it: a card opened by a worker, the CLI or a probe
@@ -2523,23 +2529,27 @@ def ledger_spent(card_id):
     return used, budget
 
 
+def retry_text(res):
+    """The words `retry` prints for a retry_card result (the CLI and the Hermes Desktop Retry button share them)."""
+    if not res["ok"]:
+        return res["why"]
+    lines = ["card %s  status=%s  assignee=%s" % (res["card"], res["status"], res["assignee"]),
+             "spent so far: %s tokens  new ceiling: %s tokens" % (format(res["spent"], ","), format(res["budget"], ","))]
+    if res["dry_run"]:
+        lines.append("would rewrite the Budget line and unblock %s" % res["card"])
+        return "\n".join(lines)
+    lines.append("budget line rewritten, %d ledger(s) kept as *.spent, counter resets" % res["ledgers_moved"])
+    if res["unblock"]:
+        lines.append("unblock: %s (rc=%d)" % (res["unblock"]["out"], res["unblock"]["rc"]))
+    return "\n".join(lines)
+
+
 def cmd_retry(args):
     res = retry_card(args.card, budget=args.budget, dry_run=args.dry_run,
                      unblock=not args.no_unblock,
                      profile=args.profile or (owner_profile() if owner_profile() != "default" else None))
-    if not res["ok"]:
-        print(res["why"])
-        return 2
-    print("card %s  status=%s  assignee=%s" % (res["card"], res["status"], res["assignee"]))
-    print("spent so far: %s tokens  new ceiling: %s tokens" % (format(res["spent"], ","),
-                                                               format(res["budget"], ",")))
-    if args.dry_run:
-        print("would rewrite the Budget line and unblock %s" % res["card"])
-        return 0
-    print("budget line rewritten, %d ledger(s) kept as *.spent, counter resets" % res["ledgers_moved"])
-    if res["unblock"]:
-        print("unblock: %s (rc=%d)" % (res["unblock"]["out"], res["unblock"]["rc"]))
-    return 0
+    print(retry_text(res))
+    return 0 if res["ok"] else 2
 
 
 def _pct(values, q):
@@ -2741,6 +2751,8 @@ def main():
     w.add_argument("--card", required=True)
     w.add_argument("--poll", type=int, default=None)
     w.add_argument("--lifetime", type=int, default=None)
+    w.add_argument("--md", action="store_true", help="the ending as markdown with the Desktop pointer last "
+                                                      "(Hermes Desktop renders chat as markdown)")
     le = sub.add_parser("lesson", help="record a lesson for a role (crew_lessons.py): the plugin adds it to that "
                                        "role's later turns; use this, never edit a skill")
     le.add_argument("--role", required=True, help="worker, content, verifier, coordinator or all (comma list)")
@@ -2823,7 +2835,8 @@ def main():
         if args.cmd == "watch":
             import crew_watch
             return crew_watch.main(["--card", args.card] + (["--poll", str(args.poll)] if args.poll else [])
-                                   + (["--lifetime", str(args.lifetime)] if args.lifetime else []))
+                                   + (["--lifetime", str(args.lifetime)] if args.lifetime else [])
+                                   + (["--md"] if args.md else []))
         if args.cmd == "lesson":
             import crew_lessons
             return crew_lessons.main(["add", "--role", args.role, "--text", args.text])
