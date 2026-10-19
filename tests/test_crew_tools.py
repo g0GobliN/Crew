@@ -203,6 +203,19 @@ class OtherToolTests(ToolTestCase):
         self.assertIn("unknown state", bad)
         self.assertIn("blocked", bad)
 
+    def test_diagnose_refuses_a_key_its_schema_does_not_declare_instead_of_listing(self):
+        kb, conn, _db = K.open_board(self.home)
+        self.addCleanup(conn.close)
+        cid = K.add_card(conn, "blocked")
+        res = call("crew_diagnose", {"card_id": cid})
+        self.assertTrue(res["error"].startswith("refused: unknown argument(s) card_id"), res)
+        self.assertNotIn("count", res)
+
+    def test_verdict_refuses_an_extra_key_beside_a_valid_one(self):
+        cid = self.board_card("true")
+        res = call("crew_verdict", {"card": cid, "card_id": cid})
+        self.assertEqual("refused: unknown argument(s) card_id; this tool takes: card, timeout", res["error"])
+
     def test_diagnose_reads_a_blocked_card_off_a_kernel_board(self):
         kb, conn, _db = K.open_board(self.home)
         self.addCleanup(conn.close)

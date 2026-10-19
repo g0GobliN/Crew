@@ -1438,10 +1438,25 @@ def _crew_banner():
     return ("HERMES.CREW v%s" % ver) if ver else "HERMES.CREW"
 
 
+def _board_url():
+    """Where the owner watches the crew: crew_card.dashboard_url() (CREW_DASHBOARD_URL, the --publish address, else
+    the local service). "" when the card tool cannot be loaded; the reply then has no Board line."""
+    tool = _card_tool()
+    if tool is None:
+        return ""
+    try:
+        return str(tool.dashboard_url() or "").strip()
+    except Exception:  # noqa: BLE001 - a missing link must never break the intake
+        return ""
+
+
 def _banner_open():
-    """The preload prefix that makes the intake open its reply with the line."""
+    """The preload prefix that makes the intake open its reply with the line, and names the board the card-open
+    reply links to (owner, 2026-10-19: the terminal owner needs the dashboard URL once the run starts)."""
+    url = _board_url()
+    board = ("The crew board is at %s - the card-open reply names it on its Board: line.\n\n" % url) if url else ""
     return ("Open your reply with this line, verbatim, as its first line, then carry on with the intake:\n\n"
-            "%s\n\n" % _crew_banner())
+            "%s\n\n%s" % (_crew_banner(), board))
 
 
 def crew_intake_preload(user_message=None, session_id=None, turn_id=None, **_kw):

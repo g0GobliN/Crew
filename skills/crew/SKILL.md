@@ -1,7 +1,7 @@
 ---
 name: crew
 description: "Crew intake: /crew <ask> - the coordinator checks the ask critically, asks what is missing, then opens one contract card and hands it over."
-version: 0.9.13
+version: 0.9.14
 ---
 
 # /crew - coordinator intake
@@ -185,7 +185,7 @@ ending is reported into, the budget floor, the role's assignee and skill - and r
 message as the brief the card view draws above the coordinator. Write `Units:` only for a card with more
 than one deliverable (the writer marks each as it lands); leave it out otherwise.
 
-When `kanban_create` returns the card id, start the watcher, then reply with EXACTLY these two lines and end
+When `kanban_create` returns the card id, start the watcher, then reply with EXACTLY these three lines and end
 the turn - no "Me:/You:" list, no recap of the contract, no other text beyond the `HERMES.CREW v…`
 line the plugin asks for at the top of the turn:
 
@@ -195,8 +195,12 @@ terminal(background=true, notify_on_complete=true, command='sh "$HERMES_HOME/plu
 
 ```
 Card open: <id> - <title>
+Board: <the crew board URL named in the HERMES.CREW preload>
 I'll notify you here when it's done or if it needs you.
 ```
+
+The Board line is where the owner watches the run (the browser dashboard; in Hermes Desktop the same board is the
+Crew page). Leave the line out only when the preload named no board.
 
 The watcher only reads the board; it exits when the card is done and audited, needs the owner, or was abandoned, and
 its output comes back into this session as a new turn: relay it to the owner in one or two lines, nothing more.

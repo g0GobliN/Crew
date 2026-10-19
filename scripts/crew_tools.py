@@ -35,6 +35,13 @@ def _guarded(fn):
         try:
             if not isinstance(args, dict):
                 return _out({"error": "arguments must be an object, got %s" % type(args).__name__})
+            # A key the schema does not declare would be dropped and the tool would answer a different question
+            # (crew_diagnose(card_id=...) lists the blocked cards). Hermes passes its own context in kwargs, not args. (idea: #17)
+            known = SCHEMAS[fn.__name__]["parameters"]["properties"]
+            unknown = set(args) - set(known)
+            if unknown:
+                raise ValueError("unknown argument(s) %s; this tool takes: %s"
+                                 % (", ".join(sorted(unknown)), ", ".join(sorted(known))))
             return fn(args)
         except ValueError as exc:
             return _out({"error": "refused: %s" % exc})

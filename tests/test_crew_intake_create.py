@@ -409,6 +409,20 @@ class BannerTests(unittest.TestCase):
             user_message='[IMPORTANT: The user has invoked the "crew" skill] ask', session_id="SB2", turn_id="T")
         self.assertIn("HERMES.CREW v", (out or {}).get("context", ""))
 
+    def test_the_preload_names_the_board(self):
+        os.environ["CREW_DASHBOARD_URL"] = "https://crew.example.test"
+        try:
+            ctx = self.plug.crew_intake_preload(
+                user_message="/crew make it fast", session_id="SB3", turn_id="T")["context"]
+        finally:
+            os.environ.pop("CREW_DASHBOARD_URL", None)
+        self.assertIn("The crew board is at https://crew.example.test", ctx)
+        self.assertIn("Board: line", ctx)
+
+    def test_the_board_defaults_to_the_local_service(self):
+        os.environ.pop("CREW_DASHBOARD_URL", None)
+        self.assertRegex(self.plug._board_url(), r"^https?://")
+
     def test_the_version_comes_from_the_manifest(self):
         self.assertRegex(self.plug._crew_banner(), r"^HERMES\.CREW v\d")
 
