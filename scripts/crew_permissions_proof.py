@@ -3,10 +3,10 @@
 
 Why this exists: the runtime fires a shell hook only when its (event, command) pair sits in that
 home's shell-hooks-allowlist.json. Without the entry it logs "not allowlisted - skipped" and the gate
-simply never runs - the home still looks installed, and nothing goes red. The installer approves what crew
-ships (and a role's inheritance of an owner approval) itself, asks once for any other missing or drifted hook
-(--approve-hooks off a terminal), and in --check approves nothing. This proof pins the report and that
---check never writes the allowlist.
+simply never runs - the home still looks installed, and nothing goes red. The installer does not
+approve hooks (consent is Hermes's own prompt); it reads the allowlist, reports what is missing and, on a
+terminal, asks whether to open Hermes's prompt. This proof pins that report, and that the installer never
+writes the allowlist.
 
 The three checks mirror the runtime's own doctor (hermes_cli/hooks.py `_doctor_one`: exec bit,
 allowlist entry, mtime drift), so a home this proof calls healthy is a home `hermes hooks doctor`
@@ -15,13 +15,15 @@ calls healthy.
 Checks:
   1-7  permission_problems, one fixture per failure it must catch and one that must stay green
   8    an allowlist entry in the runtime's own shape passes the gate
-  9    the installer writes only through its one approval writer (_record_approval), in Hermes's entry shape
-  10  step_permissions on a foreign unapproved hook names --approve-hooks and writes nothing without it
-       (no terminal), and --check never writes
+  9    the installer has no approval writer at all
+  10   step_permissions reports the fault with Hermes's own approval command, in --check and in apply,
+       and never writes the allowlist
   11   the live crew homes: every declared hook approved, role settings in place
   12   install.py --check runs the gate (the step is wired into the installer)
 """
 import importlib.util
+import contextlib
+import io
 import json
 import os
 import shutil
@@ -54,7 +56,7 @@ def check(name, ok, detail=""):
 
 def write_approval(home, event, script):
     """What Hermes itself records when the owner confirms a hook (agent/shell_hooks.py): the fixture's stand-in
-    for the owner's consent (the fixture's own copy, independent of the installer's writer)."""
+    for the owner's consent. The installer has no such writer."""
     path = os.path.join(home, CI.ALLOWLIST_NAME)
     data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {"approvals": []}
     data["approvals"] = [e for e in data["approvals"] if (e["event"], e["command"]) != (event, script)]
@@ -165,34 +167,31 @@ def main():
                                                                     "script_mtime_at_approval"],
               CI.permission_problems(i))
 
-        # 9: the installer's one writer produces the runtime's entry shape
-        w_home = os.path.join(root, "writer")
-        os.makedirs(w_home)
-        w_script = os.path.join(root, "writer", "one.py")
-        open(w_script, "w").write("#!/usr/bin/env python3\n")
-        CI._record_approval(w_home, "pre_tool_call", w_script)
-        w_entry = json.load(open(os.path.join(w_home, CI.ALLOWLIST_NAME), encoding="utf-8"))["approvals"][0]
-        check("install.py's _record_approval writes the runtime's entry shape, mtime included",
-              sorted(w_entry) == ["approved_at", "command", "event", "script_mtime_at_approval"]
-              and w_entry["script_mtime_at_approval"] == CI._mtime_iso(w_script), w_entry)
+        # 9: the installer cannot approve
+        src = open(INSTALL, encoding="utf-8").read()
+        check("install.py has no approval writer, no --approve-hooks and sets no HERMES_ACCEPT_HOOKS",
+              not hasattr(CI, "_record_approval") and "--approve-hooks" not in src and "HERMES_ACCEPT_HOOKS" not in src)
 
-        # 10: a foreign hook nobody approved: named block, the flag, and no write without it
+        # 10: the step reports, with Hermes's own flow, and writes nothing
         j_home = os.path.join(root, "stepped")
         j = fixture(root, "stepped", [("pre_tool_call", os.path.join(j_home, "hooks", "one.py"))],
                     approve=False)
-        real_plans, real_confirm = CI._role_plans, CI._confirm_block
+        real_plans, real_ask = CI._role_plans, CI._ask
         CI._role_plans = lambda prefix: []
-        CI._confirm_block = lambda: None            # no terminal
+        CI._ask = lambda q: None                    # no terminal
         try:
             for apply in (False, True):
-                status, detail = CI.step_permissions(j, "stepped", "x-", apply)
-                check("step_permissions (apply=%s) names --approve-hooks and writes nothing" % apply,
-                      status in ("CHANGED", "FAILED") and "--approve-hooks" in detail
-                      and not os.path.exists(os.path.join(j, CI.ALLOWLIST_NAME)), detail)
-            status, detail = CI.step_permissions(j, "stepped", "x-", True, approve_hooks=True)
-            check("with --approve-hooks the step approves it and reads OK", status == "OK", detail)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status, detail = CI.step_permissions(j, "stepped", "x-", apply)
+                check("step_permissions (apply=%s) is FAILED, names `hermes ... chat`, writes nothing" % apply,
+                      status == "FAILED" and "hermes -p stepped chat" in detail
+                      and "hooks doctor" in detail and not os.path.exists(os.path.join(j, CI.ALLOWLIST_NAME)),
+                      detail)
+            write_approval(j, "pre_tool_call", os.path.join(j_home, "hooks", "one.py"))
+            status, detail = CI.step_permissions(j, "stepped", "x-", False)
+            check("once the owner approved it the step reads OK", status == "OK", detail)
         finally:
-            CI._role_plans, CI._confirm_block = real_plans, real_confirm
+            CI._role_plans, CI._ask = real_plans, real_ask
 
         # 11: the live crew homes
         homes = [("", CI.resolve_profile_home(crew_card.owner_profile()))]

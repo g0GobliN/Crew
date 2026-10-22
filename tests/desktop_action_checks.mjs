@@ -48,8 +48,7 @@ export async function actionChecks({ tmp, React, createRoot, window, document, o
   const state = h => Object.fromEntries(['unstuck', 'retry', 'proof', 'stop'].filter(n => h.querySelector('#act-' + n)).map(n => [n, !h.querySelector('#act-' + n).disabled]))
 
   const withHost = await makePlugin(true), noHost = await makePlugin(false)
-  const opened = []
-  window.hermesDesktop = { openSessionWindow: (s, o) => opened.push([s, o]) }
+  const opened = globalThis.__opened = []
 
   // blocked card without a proof question: Unstuck and Retry on, Stop off, no Proof button at all; Open chat there because the card has a session
   let rests = []

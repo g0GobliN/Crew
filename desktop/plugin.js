@@ -2,7 +2,7 @@
 
 // src/desktop.tsx
 import { useMemo as useMemo4, useState as useState13 } from "react";
-import * as sdk from "@hermes/plugin-sdk";
+import * as sdk2 from "@hermes/plugin-sdk";
 import { PANES_AREA, ROUTES_AREA, SIDEBAR_NAV_AREA, useTheme as useTheme2 } from "@hermes/plugin-sdk";
 
 // src/avatars.ts
@@ -74,6 +74,7 @@ function blockedWatch(read, onBlocked) {
 
 // src/components/CrewPage.tsx
 import { useEffect as useEffect10, useState as useState11 } from "react";
+import * as sdk from "@hermes/plugin-sdk";
 import { useTheme } from "@hermes/plugin-sdk";
 
 // src/theme.ts
@@ -3234,8 +3235,11 @@ function CrewPage({ api }) {
     return () => window.removeEventListener("hashchange", go);
   }, []);
   const back = () => setRoute({ page: "board", all: false });
-  const open2 = typeof window !== "undefined" ? window.hermesDesktop?.openSessionWindow : void 0;
-  const openChat = typeof open2 === "function" ? (profile, session) => open2(session, { profile }) : void 0;
+  const host3 = sdk.host;
+  const openSession = host3?.openSession;
+  const openChat = typeof openSession === "function" ? (profile, session) => {
+    void openSession.call(host3, session, { profile });
+  } : void 0;
   const [splash] = useState11(() => !splashShown);
   useEffect10(() => {
     splashShown = true;
@@ -3404,22 +3408,22 @@ function FlowPane({ api, navigate, cardLink: cardLink2, boardLink }) {
 import { jsx as jsx21, jsxs as jsxs20 } from "react/jsx-runtime";
 function Pane({ api }) {
   const { theme, renderedMode } = useTheme2();
-  return /* @__PURE__ */ jsx21("div", { style: { ...crewVarsFromTheme(theme, renderedMode), background: "var(--crew-bg)", color: "var(--crew-fg)", height: "100%" }, children: /* @__PURE__ */ jsx21(FlowPane, { api, navigate: (path) => sdk.host?.navigate?.(path), cardLink, boardLink: CREW_ROUTE }) });
+  return /* @__PURE__ */ jsx21("div", { style: { ...crewVarsFromTheme(theme, renderedMode), background: "var(--crew-bg)", color: "var(--crew-fg)", height: "100%" }, children: /* @__PURE__ */ jsx21(FlowPane, { api, navigate: (path) => sdk2.host?.navigate?.(path), cardLink, boardLink: CREW_ROUTE }) });
 }
 function Host({ api, kanban, children }) {
   const [ask, setAsk] = useState13(null);
   const [showKanban, setShowKanban] = useState13(kanban ? kanban.show : false);
-  const host2 = useMemo4(() => {
+  const host3 = useMemo4(() => {
     const h = {};
-    const Md2 = sdk.MessageTextContent, Sd = sdk.Streamdown;
+    const Md2 = sdk2.MessageTextContent, Sd = sdk2.Streamdown;
     if (Md2) h.renderMarkdown = (text) => /* @__PURE__ */ jsx21(Md2, { text, media: false });
     else if (Sd) h.renderMarkdown = (text) => /* @__PURE__ */ jsx21(Sd, { children: text });
-    if (sdk.Button && sdk.ConfirmDialog)
+    if (sdk2.Button && sdk2.ConfirmDialog)
       h.actions = {
         // the route is POST /action/<name> {card, ...extra}; the backend allowlists the names again
         run: (name, card, extra) => api.post("/action/" + name, { ...extra, card }),
         confirm: (title, body) => new Promise((resolve) => setAsk({ title, body, done: resolve })),
-        Button: sdk.Button
+        Button: sdk2.Button
       };
     if (kanban) h.kanbanRow = { show: showKanban, set: (v) => {
       kanban.set(v);
@@ -3427,12 +3431,12 @@ function Host({ api, kanban, children }) {
     } };
     return h;
   }, [api, kanban, showKanban]);
-  const Dialog = sdk.ConfirmDialog;
+  const Dialog = sdk2.ConfirmDialog;
   const close = (ok) => {
     if (ask) ask.done(ok);
     setAsk(null);
   };
-  return /* @__PURE__ */ jsxs20(CrewHostContext.Provider, { value: host2, children: [
+  return /* @__PURE__ */ jsxs20(CrewHostContext.Provider, { value: host3, children: [
     children,
     Dialog && ask ? /* @__PURE__ */ jsx21(Dialog, { open: true, title: ask.title, description: ask.body, confirmLabel: "Confirm", destructive: true, onClose: () => close(false), onConfirm: () => close(true) }) : null
   ] });
@@ -3440,7 +3444,7 @@ function Host({ api, kanban, children }) {
 var KANBAN_ROW_ID = "kanban:nav";
 var HIDE_KEY = "hideKanbanRow";
 function kanbanRowSwitch(ctx) {
-  const area = sdk.SIDEBAR_NAV_PREFS_AREA;
+  const area = sdk2.SIDEBAR_NAV_PREFS_AREA;
   if (!area || typeof ctx.register !== "function") return null;
   let drop;
   const apply = (show) => {
@@ -3466,16 +3470,16 @@ function kanbanRowSwitch(ctx) {
 }
 var WATCH_MS = 5e3;
 function watchBlocked(ctx, api) {
-  const host2 = sdk.host;
-  if (!host2?.notify || typeof ctx.setInterval !== "function") return;
+  const host3 = sdk2.host;
+  if (!host3?.notify || typeof ctx.setInterval !== "function") return;
   const tick = blockedWatch(() => api.get("/board.json"), (t) => {
-    host2.notify({
+    host3.notify({
       id: "crew-blocked-" + t.id,
       kind: "warning",
       title: "Crew: a card needs you",
       message: t.message,
       detail: t.detail,
-      action: { label: "Open in Crew", onClick: () => host2.navigate?.(cardLink(t.id)) }
+      action: { label: "Open in Crew", onClick: () => host3.navigate?.(cardLink(t.id)) }
     });
     try {
       ctx.os?.notify({ title: "Crew: a card needs you", body: t.message + "\n" + t.detail });

@@ -5,7 +5,9 @@ The rule these pin: a hook only fires when its (event, command) pair is in that 
 shell-hooks-allowlist.json, so the pair list must come from the home's own config.yaml and the record
 the installer writes must be the record the runtime accepts.
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -25,7 +27,7 @@ spec.loader.exec_module(CI)
 
 
 def approve(home, event, command):
-    """What Hermes records when the owner confirms a hook (a fixture; the installer writes the same shape)."""
+    """What Hermes records when the owner confirms a hook; the installer has no writer for it."""
     path = os.path.join(home, CI.ALLOWLIST_NAME)
     data = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {"approvals": []}
     data["approvals"].append({"event": event, "command": command, "approved_at": CI._iso(time.time()),
@@ -175,11 +177,15 @@ class PermissionProblemTests(unittest.TestCase):
         self.assertTrue(any("no approvals list" in p or "unreadable" in p for p in problems), problems)
 
 
-class UnapprovedHookStepTests(unittest.TestCase):
-    """A foreign hook nobody approved: the step lists it and, with no terminal and no --approve-hooks, writes nothing
-    (the approval paths themselves are pinned in test_crew_hook_consent.py)."""
+class NoApprovalWriterTests(unittest.TestCase):
+    """Consent is Hermes's: the installer reads the allowlist, reports what is missing, and never writes it."""
 
-    def test_the_step_fails_naming_the_flag_and_writes_nothing(self):
+    def test_the_installer_has_no_approval_writer_and_sets_no_accept_hooks_env(self):
+        src = (REPO / "install.py").read_text(encoding="utf-8")
+        self.assertFalse(hasattr(CI, "_record_approval"))
+        self.assertNotIn("HERMES_ACCEPT_HOOKS", src)
+
+    def test_the_step_reports_with_the_hermes_command_and_writes_nothing(self):
         tmp = tempfile.mkdtemp(prefix="crew-perm-unit-")
         home = os.path.join(tmp, "home")
         hook = os.path.join(home, "gate.py")
@@ -187,15 +193,17 @@ class UnapprovedHookStepTests(unittest.TestCase):
         Path(hook).write_text("#!/bin/sh\n", encoding="utf-8")
         os.chmod(hook, 0o755)
         write_config(home, "hooks:\n  pre_tool_call:\n    - command: %s\n" % hook)
-        saved = (CI._role_plans, CI._confirm_block)
+        saved = (CI._role_plans, CI._ask)
         CI._role_plans = lambda prefix: []
-        CI._confirm_block = lambda: None
-        self.addCleanup(lambda: (setattr(CI, "_role_plans", saved[0]), setattr(CI, "_confirm_block", saved[1])))
+        CI._ask = lambda q: None                               # no terminal
+        self.addCleanup(lambda: (setattr(CI, "_role_plans", saved[0]), setattr(CI, "_ask", saved[1])))
         for apply in (False, True):
-            status, detail = CI.step_permissions(home, "owner", "crew-", apply)
-            self.assertIn(status, ("CHANGED", "FAILED"))
+            with contextlib.redirect_stdout(io.StringIO()):
+                status, detail = CI.step_permissions(home, "owner", "crew-", apply)
+            self.assertEqual("FAILED", status)
+            self.assertIn("hermes -p owner chat", detail)
+            self.assertIn("hermes -p owner hooks doctor", detail)
             self.assertFalse(os.path.exists(os.path.join(home, CI.ALLOWLIST_NAME)))
-        self.assertIn("--approve-hooks", detail)
 
 
 class SettingsProblemTests(unittest.TestCase):

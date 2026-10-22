@@ -24,6 +24,8 @@ declare module '@hermes/plugin-sdk' {
   export const host: {
     notify?(n: { id?: string; kind?: string; title?: string; message: string; detail?: string; action?: { label: string; onClick: () => void } }): string
     navigate?(path: string): void
+    /** Open a stored chat session (Desktop's plugin-session contract, apps/desktop/src/sdk PluginOpenSessionOptions). */
+    openSession?(sessionId: string, opts?: { profile?: string; intent?: string }): Promise<unknown>
   } | undefined
   export function useTheme(): { theme: DesktopTheme; renderedMode: 'light' | 'dark' }
 }

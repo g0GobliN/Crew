@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import * as sdk from '@hermes/plugin-sdk'
 import { useTheme } from '@hermes/plugin-sdk'
 import type { CrewApi } from '../api'
 import { crewVarsFromTheme } from '../theme'
@@ -25,9 +26,12 @@ export function CrewPage({ api }: { api: CrewApi }) {
     return () => window.removeEventListener('hashchange', go)
   }, [])
   const back = () => setRoute({ page: 'board', all: false })
-  // Desktop opens a chat in its own window: window.hermesDesktop.openSessionWindow(session, { profile }).
-  const open = typeof window !== 'undefined' ? (window as any).hermesDesktop?.openSessionWindow : undefined
-  const openChat = typeof open === 'function' ? (profile: string, session: string) => open(session, { profile }) : undefined
+  // Desktop opens a chat through the plugin SDK's host contract: host.openSession(session, { profile }).
+  const host = sdk.host
+  const openSession = host?.openSession
+  const openChat = typeof openSession === 'function'
+    ? (profile: string, session: string) => { void openSession.call(host, session, { profile }) }
+    : undefined
   // Once per app session: the flag lives in this module, so it survives the page remounting on every route change
   // (Desktop unmounts /crew when you leave it) and resets when the app restarts. It is set in an effect, not in the
   // initializer, so a double-invoked initializer cannot swallow the splash.

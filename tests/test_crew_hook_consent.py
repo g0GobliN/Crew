@@ -2,10 +2,10 @@
 """The installer's shell-hook consent and profile-parity steps (install.py step_permissions, step_parity).
 
 Every test runs on a temp base home (patched resolve_profile_home / default_home), never the real ~/.hermes.
-The rules pinned: crew-shipped and owner-inherited hooks are approved without a prompt; a foreign missing or
-drifted hook needs the one block (non-TTY without --approve-hooks: nothing written, exit 1); --check writes
-nothing; a profile that lags the package is repaired and re-checked, "not ready" only if it still differs; the entry written is byte-for-byte what
-Hermes's own writer writes.
+The rules pinned: the installer never writes shell-hooks-allowlist.json and never passes --accept-hooks, whoever
+shipped the hook; one profile's approval is never copied into another; on a terminal it asks per profile whether to
+open Hermes's own prompt (yes: revoke drifted entries, then `hermes -p P chat`; no: nothing runs) and --check never
+asks; a profile that lags the package is repaired and re-checked, "not ready" only if it still differs.
 """
 import contextlib
 import importlib.util
@@ -27,6 +27,7 @@ spec = importlib.util.spec_from_file_location("crew_install_consent", str(REPO /
 CI = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = CI
 spec.loader.exec_module(CI)
+HANDOFF = CI._hermes_consent                       # the real one, before Base patches it
 
 HERMES_PY, HERMES_ROOT = CI._hermes_python()      # resolved before a test repoints the default home
 SHIPPED_REL = "scripts/crew_signature_gate.py"      # a script the package ships (in PLUGIN_FILES)
@@ -66,13 +67,16 @@ class Base(unittest.TestCase):
         self.worker = os.path.join(self.base, "profiles", "crew-worker")
         for home in (self.owner, self.worker):
             os.makedirs(home)
-        saved = (CI.resolve_profile_home, CI.crew_card.default_home, CI._confirm_block)
+        saved = (CI.resolve_profile_home, CI.crew_card.default_home, CI._ask, CI._hermes_consent)
         self.addCleanup(lambda: (setattr(CI, "resolve_profile_home", saved[0]),
                                  setattr(CI.crew_card, "default_home", saved[1]),
-                                 setattr(CI, "_confirm_block", saved[2])))
+                                 setattr(CI, "_ask", saved[2]), setattr(CI, "_hermes_consent", saved[3])))
         CI.resolve_profile_home = lambda name: os.path.join(self.base, "profiles", name)
         CI.crew_card.default_home = lambda: self.base
-        CI._confirm_block = lambda: None                      # no terminal unless a test says otherwise
+        self.asked, self.handed = [], []
+        self.answer = None                                    # no terminal unless a test says otherwise
+        CI._ask = lambda q: (self.asked.append(q), self.answer)[1]
+        CI._hermes_consent = lambda name, drift: self.handed.append((name, list(drift)))
         self.foreign = os.path.join(self.tmp, "agent-hooks", "block-windows-paths.py")
         write(self.foreign, "#!/usr/bin/env python3\nprint('{}')\n")
 
@@ -84,129 +88,92 @@ class Base(unittest.TestCase):
         os.chmod(dst, 0o755)
         return dst
 
-    def step(self, apply=True, approve_hooks=False):
+    def step(self, apply=True):
         with contextlib.redirect_stdout(io.StringIO()) as out:
-            status, detail = CI.step_permissions(self.owner, "owner", "crew-", apply, approve_hooks)
+            status, detail = CI.step_permissions(self.owner, "owner", "crew-", apply)
         return status, detail, out.getvalue()
 
 
 class ConsentTests(Base):
-    def test_a_crew_shipped_hook_is_approved_without_a_prompt(self):
-        script = self.shipped(self.owner)
-        declare(self.owner, script)
-        status, detail, _ = self.step()
-        self.assertEqual("OK", status, detail)
-        entry = allowlist(self.owner)["approvals"][0]
-        self.assertEqual(["approved_at", "command", "event", "script_mtime_at_approval"], sorted(entry))
-        self.assertEqual((script, "pre_tool_call"), (entry["command"], entry["event"]))
-        self.assertEqual(CI._mtime_iso(script), entry["script_mtime_at_approval"])
-
-    def test_a_copy_of_a_shipped_script_that_was_edited_is_not_crew_shipped(self):
-        script = self.shipped(self.owner)
-        Path(script).write_text("#!/usr/bin/env python3\n# edited\n", encoding="utf-8")
-        declare(self.owner, script)
-        status, detail, out = self.step()
+    def test_a_crew_shipped_hook_is_reported_not_approved(self):
+        declare(self.owner, self.shipped(self.owner))
+        status, detail, _out = self.step()
         self.assertEqual("FAILED", status)
-        self.assertIn("--approve-hooks", detail)
+        self.assertIn("hermes -p owner chat", detail)
         self.assertIsNone(allowlist(self.owner))
 
-    def test_a_role_profile_inherits_a_current_owner_approval(self):
-        declare(self.owner, self.foreign)
-        declare(self.worker, self.foreign)
+    def test_an_owner_approval_is_never_copied_into_a_role_profile(self):
         seed_entry(self.owner, self.foreign, CI._mtime_iso(self.foreign))
-        status, detail, _ = self.step()
-        self.assertEqual("OK", status, detail)
-        entry = allowlist(self.worker)["approvals"][0]
-        self.assertEqual(self.foreign, entry["command"])
-        self.assertEqual(CI._mtime_iso(self.foreign), entry["script_mtime_at_approval"])
-
-    def test_a_drifted_foreign_hook_without_a_terminal_or_the_flag_writes_nothing_and_fails(self):
         declare(self.owner, self.foreign)
-        seed_entry(self.owner, self.foreign, "2026-09-22T17:10:43.330120Z")     # the script was modified later
-        before = (Path(self.owner) / CI.ALLOWLIST_NAME).read_bytes()
+        CI_plans = CI._role_plans
+        CI._role_plans = lambda prefix: [("worker", "crew-worker", self.worker, None)]
+        self.addCleanup(setattr, CI, "_role_plans", CI_plans)
+        declare(self.worker, self.foreign)
+        status, detail, _out = self.step()
+        self.assertEqual("FAILED", status)
+        self.assertIn("crew-worker: declared but not approved", detail)
+        self.assertIsNone(allowlist(self.worker))
+
+    def test_no_terminal_asks_nothing_runs_nothing_writes_nothing(self):
+        declare(self.owner, self.foreign)
         status, detail, out = self.step()
         self.assertEqual("FAILED", status)
-        self.assertIn("--approve-hooks", detail)
-        self.assertEqual(before, (Path(self.owner) / CI.ALLOWLIST_NAME).read_bytes())
-        self.assertIn("owner | pre_tool_call | %s" % self.foreign, out)
-        self.assertIn("approved 2026-09-28T21:30:03.224255Z vs script modified", out)
-
-    def test_the_flag_replaces_the_stale_entry_with_the_current_mtime(self):
-        declare(self.owner, self.foreign)
-        declare(self.worker, self.foreign)
-        seed_entry(self.owner, self.foreign, "2026-09-22T17:10:43.330120Z")
-        status, detail, out = self.step(approve_hooks=True)
-        self.assertEqual("OK", status, detail)
-        entries = allowlist(self.owner)["approvals"]
-        self.assertEqual(1, len(entries), entries)                               # replaced, not appended
-        self.assertEqual(CI._mtime_iso(self.foreign), entries[0]["script_mtime_at_approval"])
-        self.assertEqual(1, out.count("shell hooks that need your consent"))       # one block, the role follows the owner
-        self.assertEqual(self.foreign, allowlist(self.worker)["approvals"][0]["command"])
-
-    def test_a_terminal_answer_yes_approves_and_no_does_not(self):
-        declare(self.owner, self.foreign)
-        CI._confirm_block = lambda: False
-        self.assertEqual("FAILED", self.step()[0])
+        self.assertEqual([], self.handed)
+        self.assertEqual(1, len(self.asked))               # asked once, got None (no terminal)
+        self.assertIn("not approved:   [pre_tool_call] %s" % self.foreign, out)
         self.assertIsNone(allowlist(self.owner))
-        CI._confirm_block = lambda: True
-        self.assertEqual("OK", self.step()[0])
-        self.assertEqual(1, len(allowlist(self.owner)["approvals"]))
 
-    def test_check_writes_nothing_and_says_what_it_would_do(self):
-        script = self.shipped(self.owner)
-        declare(self.owner, script, self.foreign)
-        status, detail, out = self.step(apply=False, approve_hooks=True)
-        self.assertEqual("CHANGED", status)
-        self.assertIn("would approve 1 hook(s) without a prompt", detail)
-        self.assertIn(self.foreign, detail)
-        self.assertEqual("", out)
-        self.assertFalse(os.path.exists(os.path.join(self.owner, CI.ALLOWLIST_NAME)))
-        self.assertFalse(os.path.exists(os.path.join(self.owner, CI.ALLOWLIST_NAME + ".lock")))
-
-    def test_main_exits_1_and_names_the_flag_when_consent_is_missing(self):
+    def test_yes_hands_the_profile_to_hermes_and_no_does_not(self):
         declare(self.owner, self.foreign)
-        saved = (CI._steps, CI.report, CI.h)
-        self.addCleanup(lambda: (setattr(CI, "_steps", saved[0]), setattr(CI, "report", saved[1]), setattr(CI, "h", saved[2])))
-        CI._steps = lambda home, profile, args: [("permissions", lambda a: CI.step_permissions(
-            self.owner, "owner", "crew-", a, args.approve_hooks))]
-        CI.report = lambda *a: None
-        CI.h = lambda *a: type("R", (), {"stdout": "", "returncode": 0})()
-        out = io.StringIO()
-        with contextlib.redirect_stdout(out):
-            sys.argv = ["install.py", "--profile", "owner", "--no-service", "--no-cron"]
-            code = CI.main()
-        self.assertEqual(1, code)
-        self.assertIn("--approve-hooks", out.getvalue())
-        self.assertIn("NOT READY: permissions", out.getvalue())
+        self.answer = False
+        self.step()
+        self.assertEqual([], self.handed)
+        self.answer = True
+        self.step()
+        self.assertEqual([("owner", [])], self.handed)
+        self.assertIsNone(allowlist(self.owner))           # the installer wrote nothing either way
+
+    def test_a_drifted_entry_is_named_and_passed_on_for_revoke(self):
+        seed_entry(self.owner, self.foreign, "2000-01-01T00:00:00Z")
+        declare(self.owner, self.foreign)
+        before = allowlist(self.owner)
+        self.answer = True
+        _status, _detail, out = self.step()
+        self.assertIn("script changed: [pre_tool_call] %s" % self.foreign, out)
+        self.assertEqual([("owner", [("pre_tool_call", self.foreign)])], self.handed)
+        self.assertEqual(before, allowlist(self.owner))
+
+    def test_a_current_approval_asks_nothing_and_reads_ok(self):
+        seed_entry(self.owner, self.foreign, CI._mtime_iso(self.foreign))
+        declare(self.owner, self.foreign)
+        status, _detail, _out = self.step()
+        self.assertEqual("OK", status)
+        self.assertEqual([], self.asked)
+
+    def test_check_never_asks(self):
+        declare(self.owner, self.foreign)
+        status, detail, _out = self.step(apply=False)
+        self.assertEqual("FAILED", status)
+        self.assertEqual([], self.asked)
         self.assertIsNone(allowlist(self.owner))
+
+
+class HermesHandOffTests(Base):
+    def test_revoke_then_chat_on_this_terminal_never_accept_hooks(self):
+        calls = []
+        real = CI.subprocess.run
+        CI.subprocess.run = lambda cmd, **kw: calls.append(cmd)
+        self.addCleanup(setattr, CI.subprocess, "run", real)
         with contextlib.redirect_stdout(io.StringIO()):
-            sys.argv = ["install.py", "--profile", "owner", "--no-service", "--no-cron", "--approve-hooks"]
-            self.assertEqual(0, CI.main())
+            HANDOFF("crew-worker", [("pre_tool_call", self.foreign)])
+        hb = CI.hermes_bin()
+        self.assertEqual([[hb, "-p", "crew-worker", "hooks", "revoke", self.foreign],
+                          [hb, "-p", "crew-worker", "chat"]], calls)
 
-
-class WriterTests(Base):
-    def test_the_entry_is_what_hermes_writes(self):
-        py, root = HERMES_PY, HERMES_ROOT
-        if not py:
-            self.skipTest("no Hermes python on this box")
-        theirs = os.path.join(self.tmp, "theirs")
-        os.makedirs(theirs)
-        code = "import sys; sys.path.insert(0, sys.argv[1]); from agent import shell_hooks as s; s._record_approval('pre_tool_call', sys.argv[2])"
-        r = subprocess.run([py, "-c", code, root, self.foreign], env=dict(os.environ, HERMES_HOME=theirs),
-                           capture_output=True, text=True, timeout=120)
-        if r.returncode:
-            self.skipTest("Hermes writer not runnable here: %s" % r.stderr[-200:])
-        CI._record_approval(self.owner, "pre_tool_call", self.foreign)
-        a, b = allowlist(theirs), allowlist(self.owner)
-        for d in (a, b):
-            d["approvals"][0]["approved_at"] = "T"
-        self.assertEqual(a, b)
-        self.assertEqual(oct(os.stat(os.path.join(theirs, CI.ALLOWLIST_NAME)).st_mode & 0o777),
-                         oct(os.stat(os.path.join(self.owner, CI.ALLOWLIST_NAME)).st_mode & 0o777))
-        # same key order, indent and no trailing newline
-        strip = lambda t: json.dumps(json.loads(t), indent=2, sort_keys=True)
-        self.assertEqual(strip((Path(theirs) / CI.ALLOWLIST_NAME).read_text()), (Path(theirs) / CI.ALLOWLIST_NAME).read_text())
-        self.assertEqual(strip((Path(self.owner) / CI.ALLOWLIST_NAME).read_text()), (Path(self.owner) / CI.ALLOWLIST_NAME).read_text())
+    def test_the_installer_holds_no_allowlist_writer(self):
+        src = (REPO / "install.py").read_text(encoding="utf-8")
+        for token in ("_record_approval", "--approve-hooks", "HERMES_ACCEPT_HOOKS", '"--accept-hooks"', ".shell-hooks-allowlist_"):
+            self.assertNotIn(token, src)
 
 
 class ParityTests(Base):

@@ -84,8 +84,9 @@ hermes -p NAME plugins doctor crew
 ```
 
 `NAME` is the profile you chat with (`default` if you do not use profiles). Running the installer twice
-changes nothing; `--check` is a dry run that prints exactly what would change. The installer never asks
-anything and never approves a shell hook for you.
+changes nothing; `--check` is a dry run that prints exactly what would change. The installer never approves
+a shell hook for you and never writes Hermes's hook allowlist: if a profile has a hook waiting, it asks (y/N)
+whether to open that profile's Hermes so Hermes itself asks you.
 
 > **On Windows?** Native Windows is supported with [Git for Windows](https://git-scm.com/download/win)
 > installed (proofs run in Git Bash). It has no systemd or cron, so the graph-http service and
@@ -126,8 +127,12 @@ Only when you ask for it:
 | `--spill-cap` | Sets `hooks.output_spill.max_chars` on your profile, so the `/crew` intake reads its brief in one tool call. |
 | `--publish` | Serves the dashboard on your tailnet with `tailscale serve` (tailnet only, never the internet). Only one tailnet login gets in (`--publish-user LOGIN`, or the tailnet's single human login; otherwise it refuses), plus devices with a tag from `--publish-tag` (a tagged device carries no login). |
 
-The installer reports shell hooks your profiles declare but you have not approved. It never approves them:
-review them with `hermes -p P hooks list` and confirm them at Hermes's own prompt.
+The installer reports shell hooks your profiles declare but you have not approved. It never approves them
+and never copies one profile's approvals into another. On a terminal it asks per profile, y/N, whether to start
+`hermes -p P chat` now: Hermes then asks you about each hook at its own prompt (a hook whose script changed since
+you approved it is revoked first with `hermes -p P hooks revoke`), and you leave with `/exit`. Answer no, or run
+without a terminal, and it prints the commands instead: review with `hermes -p P hooks list`, confirm at Hermes's
+prompt (or type `--accept-hooks` yourself), check with `hermes -p P hooks doctor`.
 
 ## Crew in Hermes Desktop
 

@@ -31,6 +31,8 @@ const runtimeUrl = pathToFileURL(req.resolve('react/jsx-runtime')).href
 fs.writeFileSync(path.join(tmp, 'sdk.mjs'), `
 export const ROUTES_AREA = 'routes', SIDEBAR_NAV_AREA = 'sidebar.nav', PANES_AREA = 'panes'
 export const useTheme = () => ({ theme: globalThis.__theme, renderedMode: globalThis.__mode || 'light' })
+// Desktop's chat-open contract, host.openSession(session, { profile }) (recorded); every Desktop SDK has it
+export const host = { openSession: (s, o) => { (globalThis.__opened = globalThis.__opened || []).push([s, o]); return Promise.resolve() } }
 `)
 // The app's pieces a host-aware build uses (Desktop exports them; a stand-in for each): the chat's message renderer (bold
 // and `code` to markup, so a test can tell it ran), the Button (data-variant/size so the bar's choice shows), the ConfirmDialog.
@@ -41,11 +43,12 @@ export const MessageTextContent = ({ text }) => h('div', { className: 'stub-md',
   .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>').replace(/\`([^\`]+)\`/g, '<code>$1</code>') } })
 export const Button = ({ children, id, title, disabled, onClick, variant, size }) =>
   h('button', { type: 'button', id, title, disabled, onClick, 'data-variant': variant, 'data-size': size }, children)
-// the host verbs a plugin may use: a toast (recorded) and the router (the hash, as the real navigate sets it)
-export const host = {
+// the host verbs a plugin may use beyond openSession (in both stubs): a toast (recorded) and the router (the hash, as the
+// real navigate sets it)
+Object.assign(host, {
   notify: n => { (globalThis.__toasts = globalThis.__toasts || []).push(n); return n.id },
   navigate: p => { window.location.hash = '#' + p }
-}
+})
 export const ConfirmDialog = ({ open, title, onConfirm, onClose }) => open
   ? h('div', { id: 'confirm' }, h('b', null, title), h('button', { id: 'confirm-yes', onClick: onConfirm }, 'Confirm'), h('button', { id: 'confirm-no', onClick: onClose }, 'Cancel'))
   : null
@@ -320,7 +323,7 @@ ok((await mount(page.render)).includes('Crew could not load: boom'), 'page shows
   const { actionChecks } = await import(pathToFileURL(path.join(here, 'desktop_action_checks.mjs')).href)
   const makePlugin = async withHost => {
     const file = path.join(tmp, withHost ? 'plugin-host.mjs' : 'plugin-nohost.mjs')
-    fs.writeFileSync(file, rewritten.replace('"./sdk.mjs"', withHost ? '"./sdk-host.mjs"' : '"./sdk.mjs"'))
+    fs.writeFileSync(file, rewritten.replaceAll('"./sdk.mjs"', withHost ? '"./sdk-host.mjs"' : '"./sdk.mjs"'))
     return { mod: await import(pathToFileURL(file).href + '?v=' + (withHost ? 'h' : 'n')) }
   }
   await actionChecks({ tmp, React, createRoot, window: dom.window, document, ok, eq, fixtures: path.join(here, 'fixtures'), board, makePlugin })
@@ -330,7 +333,7 @@ ok((await mount(page.render)).includes('Crew could not load: boom'), 'page shows
   const { tileActionChecks } = await import(pathToFileURL(path.join(here, 'desktop_tile_action_checks.mjs')).href)
   const makePlugin = async withHost => {
     const file = path.join(tmp, withHost ? 'plugin-host-t.mjs' : 'plugin-nohost-t.mjs')
-    fs.writeFileSync(file, rewritten.replace('"./sdk.mjs"', withHost ? '"./sdk-host.mjs"' : '"./sdk.mjs"'))
+    fs.writeFileSync(file, rewritten.replaceAll('"./sdk.mjs"', withHost ? '"./sdk-host.mjs"' : '"./sdk.mjs"'))
     return { mod: await import(pathToFileURL(file).href + '?v=t' + (withHost ? 'h' : 'n')) }
   }
   await tileActionChecks({ React, createRoot, window: dom.window, document, ok, eq, board, makePlugin })
@@ -341,7 +344,7 @@ ok((await mount(page.render)).includes('Crew could not load: boom'), 'page shows
   const { blockedChecks } = await import(pathToFileURL(path.join(here, 'desktop_blocked_checks.mjs')).href)
   const makePlugin = async withHost => {
     const file = path.join(tmp, withHost ? 'plugin-host-b.mjs' : 'plugin-nohost-b.mjs')
-    fs.writeFileSync(file, rewritten.replace('"./sdk.mjs"', withHost ? '"./sdk-host.mjs"' : '"./sdk.mjs"'))
+    fs.writeFileSync(file, rewritten.replaceAll('"./sdk.mjs"', withHost ? '"./sdk-host.mjs"' : '"./sdk.mjs"'))
     return { mod: await import(pathToFileURL(file).href + '?v=b' + (withHost ? 'h' : 'n')) }
   }
   await blockedChecks({ React, createRoot, window: dom.window, document, ok, eq, board, makePlugin })
