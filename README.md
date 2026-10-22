@@ -5,7 +5,7 @@
 **You ask once. A coordinator owns the card until its proof passes.**
 
 [![Hermes plugin](https://img.shields.io/badge/Hermes-plugin-3fb950?style=flat-square)](https://github.com/NousResearch/hermes-agent)
-[![Version](https://img.shields.io/badge/version-0.10.0-3fb950?style=flat-square)](plugin.yaml)
+[![Version](https://img.shields.io/badge/version-0.10.1-3fb950?style=flat-square)](plugin.yaml)
 [![tests](https://github.com/macd2/Crew/actions/workflows/tests.yml/badge.svg)](https://github.com/macd2/Crew/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -32,6 +32,14 @@ hands the card to a **coordinator** that owns it until the proof command exits 0
 result back in the same chat, or one concrete question when it truly needs you.
 
 [![The crew dashboard: a card's graph with its running worker selected and the live transcript](assets/dashboard.webp)](https://crew.forgecoreai.com)
+
+## What's new in 0.10.1
+
+- **The installer asks, it never approves.** It no longer writes Hermes's hook allowlist at all (`--approve-hooks` is
+  gone): for a profile with a hook waiting it asks (y/N) whether to open that profile's Hermes, so Hermes asks you at
+  its own prompt, and a hook whose script changed is revoked first. Answer no, and it prints the commands to run.
+- **Desktop "Open chat"** opens the chat through the app's own session (`host.openSession`) rather than a window.
+- The README's hook text, the permission proof and the hook-consent tests describe that flow.
 
 ## What's new in 0.10.0
 
