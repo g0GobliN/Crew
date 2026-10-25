@@ -26,8 +26,10 @@ Chrome's DOM (crew_proof_board.render_dom) and its source from /app.js):
 Read-only except for the clears it undoes again at the end.
 Exit 0 = every check passed. Non-zero = it did not, and the failing check is printed.
 """
+import http.client
 import json
 import os
+import random
 import re
 import shutil
 import signal
@@ -60,6 +62,30 @@ STUCK = ("blocked", "triage")
 PROBE_RX = re.compile(r"\s*(PROBE|TEST)\b", re.I)
 FAILURES = []
 
+# A local board server drops a connection now and then (one RemoteDisconnected killed the 2026-10-23 nightly
+# proofs run), and a busy box answers 5xx/429. Neither is a fault in the board, so neither may raise out of
+# here: the call is retried, jittered so two runs never retry in step, honouring the server's Retry-After.
+# Only a repeat-safe call is re-sent: a GET, and /ack/*, which sets a cleared state to a fixed value (a second
+# send lands the same state) - never an increment.
+RETRY_ATTEMPTS = 4
+RETRY_CODES = (408, 429, 500, 502, 503, 504)
+RETRY_BACKOFF = (0.5, 2, 5)                 # seconds before retry 1, 2, 3; plus jitter
+TRANSIENT = (urllib.error.URLError, http.client.HTTPException, OSError)
+
+
+def retry_after(exc):
+    """The server's own Retry-After, when it sends one; None to fall back to the local backoff."""
+    try:
+        value = exc.headers.get("Retry-After")
+    except Exception:                                          # noqa: BLE001 - no headers to read
+        return None
+    if not value:
+        return None
+    try:
+        return min(float(value), 30.0)
+    except (TypeError, ValueError):
+        return None
+
 
 def check(name, ok, detail=""):
     print("%-58s %s%s" % (name, "PASS" if ok else "FAIL", ("  " + detail) if detail else ""))
@@ -73,11 +99,28 @@ def fetch(path):
     write = path.startswith("/ack/")
     req = urllib.request.Request(URL + path, method="POST" if write else "GET",
                                  headers={"Origin": URL} if write else {})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return resp.status, resp.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        return exc.code, exc.read().decode("utf-8", "replace")
+    last = None
+    wait = None
+    for attempt in range(RETRY_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                return resp.status, resp.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:        # subclass of URLError: caught before it
+            if exc.code not in RETRY_CODES or attempt == RETRY_ATTEMPTS - 1:
+                return exc.code, exc.read().decode("utf-8", "replace")
+            last = exc
+            wait = retry_after(exc)
+        except TRANSIENT as exc:
+            last = exc
+            wait = None
+        if attempt == RETRY_ATTEMPTS - 1:
+            break
+        if wait is None:
+            wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]
+        wait += random.uniform(0, 0.5)                    # jitter: two runs must not retry in step
+        print("%-58s RETRY  %s on %s in %.1fs" % ("the board did not answer", type(last).__name__, path, wait))
+        time.sleep(wait)
+    raise last
 
 
 def board_rows():
@@ -113,6 +156,21 @@ def rows_now():
 def stamp(row):
     """(id, status, entered_ts): the exact row-and-state a clear is scoped to."""
     return (row.get("id"), row.get("status"), row.get("entered_ts"))
+
+
+def wait_rows(has_id, target_id, timeout=10.0, poll=0.2):
+    """Poll the board data until `target_id` is present (has_id) or gone - a clear and its undo reach the board
+    one poll behind the drawn list, so a single read right after the click reads a stale list on a busy box
+    (this check failed in the 10-25 nightly). Returns the last read, so a timeout still reports the real rows."""
+    end = time.time() + timeout
+    rows = []
+    while True:
+        rows = rows_now()[0]
+        if (target_id in [r.get("id") for r in rows]) is bool(has_id):
+            return rows
+        if time.time() >= end:
+            return rows
+        time.sleep(poll)
 
 
 SEEDS = {"t_attn_stuck": ("Bell seed waiting card", "blocked", "blocked"),
@@ -334,10 +392,12 @@ def browser_leg():
                       and str(after.get("badge")) == str(att.get("total") - 1),
                       "%s -> %s" % (before.get("rows"), after.get("rows")))
                 check("the cleared row is gone from the board data too",
-                      target_id not in [r["id"] for r in (rows_now()[0])])
+                      target_id not in [r["id"] for r in wait_rows(False, target_id)],
+                      "still in the board data after the wait")
                 fetch("/ack/%s?undo=1" % target_id)
                 check("undo puts the drawn row back",
-                      target_id in [r["id"] for r in rows_now()[0]])
+                      target_id in [r["id"] for r in wait_rows(True, target_id)],
+                      "not back in the board data after the wait")
             else:
                 check("a drawn row exists to clear", False, "no row in the list")
 

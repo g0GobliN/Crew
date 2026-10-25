@@ -5,7 +5,7 @@
 **You ask once. A coordinator owns the card until its proof passes.**
 
 [![Hermes plugin](https://img.shields.io/badge/Hermes-plugin-3fb950?style=flat-square)](https://github.com/NousResearch/hermes-agent)
-[![Version](https://img.shields.io/badge/version-0.10.1-3fb950?style=flat-square)](plugin.yaml)
+[![Version](https://img.shields.io/badge/version-0.10.2-3fb950?style=flat-square)](plugin.yaml)
 [![tests](https://github.com/macd2/Crew/actions/workflows/tests.yml/badge.svg)](https://github.com/macd2/Crew/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -19,8 +19,9 @@
 
 ---
 
-Crew is a plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that turns one chat
-message into verified work on the Hermes kanban board.
+**The smart kanban replacement for [Hermes Agent](https://github.com/NousResearch/hermes-agent).** Hermes
+hides its own Kanban row while Crew is on, and what stands there is a board that finishes its own cards: one
+chat message becomes verified work.
 
 ```
 /crew launch the Pro plan: pricing page, Stripe checkout, launch post and email
@@ -32,6 +33,17 @@ hands the card to a **coordinator** that owns it until the proof command exits 0
 result back in the same chat, or one concrete question when it truly needs you.
 
 [![The crew dashboard: a card's graph with its running worker selected and the live transcript](assets/dashboard.webp)](https://crew.forgecoreai.com)
+
+## What's new in 0.10.2
+
+- **The board is Crew's.** Positioning, copy only: the README and the site now say what the UI already does -
+  Hermes hides its own Kanban row while Crew is on, so Crew is the smart kanban replacement for Hermes, not a
+  view on top of it.
+- **Parity compares against the release**, not the package working tree, so a dev edit after a release no longer
+  reddens the nightly with nothing wrong (10-20 and 10-24 both did). The nightly shim installs the release tree
+  first, and leaves a shipped install alone.
+- **The attention proof waits for the board** instead of reading once, so a slow poll no longer trips "the
+  cleared row is gone from the board data too" (it failed 1 run in 6 under load).
 
 ## What's new in 0.10.1
 

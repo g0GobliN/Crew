@@ -11,15 +11,48 @@ Exit: 0 when every copy matches, 1 on any mismatch or missing copy, 2 when it ca
 """
 import argparse
 import hashlib
+import io
 import json
 import os
+import subprocess
 import sys
+import tarfile
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import crew_card  # noqa: E402
 
 # The package checkout (CREW_PACKAGE, else crew_card.package_dir); the profiles it was installed into.
 PACKAGE = os.environ.get("CREW_PACKAGE") or crew_card.package_dir() or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def release_tree(package=None):
+    """The RELEASE checkout's HEAD commit, exported to a temp dir - the comparison target parity uses.
+
+    Parity answers one question: do the homes carry what was released? Comparing against the package working
+    tree made every dev edit after a release read as a defect (nightlies of 10-20 and 10-24 went red with no
+    code fault). A dirty release working copy is ignored too - HEAD is the release. None when there is no
+    release checkout beside the package, and the caller keeps comparing against the package tree.
+    """
+    base = os.path.dirname(os.path.abspath(package or PACKAGE))
+    rel = os.environ.get("CREW_RELEASE") or os.path.join(base, "release")
+    if not os.path.exists(os.path.join(rel, ".git")):
+        return None
+    try:
+        sha = subprocess.check_output(["git", "-C", rel, "rev-parse", "HEAD"], text=True,
+                                      stderr=subprocess.DEVNULL).strip()
+        tar = subprocess.check_output(["git", "-C", rel, "archive", "--format=tar", "HEAD"],
+                                      stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    out = os.path.join(tempfile.gettempdir(), "crew-release-%s" % sha[:12])
+    if not os.path.isfile(os.path.join(out, "plugin.yaml")):
+        os.makedirs(out, exist_ok=True)
+        with tarfile.open(fileobj=io.BytesIO(tar)) as tf:
+            tf.extractall(out)
+    return out if os.path.isfile(os.path.join(out, "plugin.yaml")) else None
+
+
 PROFILES = os.path.join(crew_card.default_home(), "profiles")
 # Where each shipped file lands inside a profile, read from the installer so the two can never
 # disagree about what "installed" means.
@@ -91,16 +124,29 @@ def compare(package, profiles, skip=(), mod=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--package", default=PACKAGE)
+    ap.add_argument("--package", default=None,
+                    help="the tree to compare against (default: the release checkout's HEAD, else the package)")
     ap.add_argument("--profiles", default=PROFILES)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--skip", nargs="*", default=[],
                     help="files to leave out of the comparison (retired proofs)")
     a = ap.parse_args()
 
+    if not a.package:
+        a.package = release_tree() or PACKAGE
+        print("comparing against %s" % (a.package,), file=sys.stderr)
+
     if not os.path.isdir(a.package) or not os.path.isdir(a.profiles):
         print("cannot read the package (%s) or the profiles (%s)" % (a.package, a.profiles))
         return 2
+    # A plugin copy is not a package checkout: it ships no roles/ and no installer, so comparing a whole install
+    # against it reports role files as "missing" and fails with nothing wrong on the box. Say what is missing and
+    # stop (2), instead of a red that reads like drift.
+    if not os.path.isdir(os.path.join(a.package, "roles")):
+        print("%s holds no roles/ - that is a plugin copy, not the crew package; point --package at the "
+              "installer's checkout" % a.package, file=sys.stderr)
+        return 2
+
     profiles = installed_profiles(a.profiles)
     if not profiles:
         print("no profile has the crew plugin installed under %s" % a.profiles)
