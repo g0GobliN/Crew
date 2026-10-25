@@ -56,61 +56,56 @@ CRON_PROOFS_DELIVER = "local"
 # differ from crew_proofs.py, which is in SCRIPT_FILES and which step_scripts removes from <profile>/scripts.
 PROOFS_SHIM = "crew_proofs_nightly.py"
 OLD_PROOFS_SHIM = "crew_proofs.sh"      # the earlier shim; step_proofs_cron migrates a job off it, then deletes it
-PROOFS_SHIM_TEXT = (
-    "# Written by the crew installer (--nightly-proofs). Hermes cron runs scripts from HERMES_HOME/scripts only\n"
-    "# and runs a .py one with whatever interpreter Hermes itself runs under (on the package-manager layout a bare\n"
-    "# one that cannot import Hermes), so this hands over to the plugin's own copy of the proof runner, which\n"
-    "# switches to the Hermes python itself.\n"
-    "#\n"
-    "# Before the proofs it installs the RELEASE tree when this box has one. Parity compares every crew home\n"
-    "# against the release, so a dev edit after the last install used to redden the night with no defect behind\n"
-    "# it (10-20, 10-24); installing first keeps the box and the comparison on the same tree. A shipped install\n"
-    "# (a user's own clone, no release checkout) is left alone: re-installing it nightly would undo their edits.\n"
-    "import os\n"
-    "import sys\n"
-    "import subprocess\n"
-    "\n"
-    "_home = os.path.dirname(os.path.abspath(__file__))\n"
-    "runner = os.path.join(_home, \"..\", \"plugins\", \"crew\", \"scripts\", \"crew_proofs.py\")\n"
-    "_pkg = _tree = \"\"\n"
-    "_from_release = False\n"
-    "try:\n"
-    "    sys.path.insert(0, os.path.join(_home, \"..\", \"plugins\", \"crew\", \"scripts\"))\n"
-    "    import crew_card\n"
-    "    _pkg = crew_card.package_dir() or \"\"\n"
-    "    if _pkg and _pkg not in sys.path:\n"
-    "        sys.path.insert(0, os.path.join(_pkg, \"scripts\"))\n"
-    "    try:\n"
-    "        import crew_parity_check\n"
-    "        _export = getattr(crew_parity_check, \"release_tree\", None)\n"
-    "        if _export:\n"
-    "            _found = _export(package=_pkg or None)\n"
-    "            _from_release = bool(_found)\n"
-    "            _tree = _found or _pkg\n"
-    "    except ImportError:\n"
-    "        _tree = _pkg\n"
-    "except Exception as exc:                                   # noqa: BLE001 - never kill the night on this\n"
-    "    print(\"WARNING: cannot resolve the crew package (%s)\" % exc)\n"
-    "\n"
-    "if not _from_release and _pkg:\n"
-    "    _rel = os.environ.get(\"CREW_RELEASE\") or os.path.join(os.path.dirname(_pkg), \"release\")\n"
-    "    if os.path.exists(os.path.join(_rel, \".git\")):\n"
-    "        _tree, _from_release = _rel, True\n"
-    "\n"
-    "installer = os.path.join(_tree, \"install.py\") if _tree else \"\"\n"
-    "if _from_release and os.path.exists(installer):\n"
-    "    # the profile this shim sits in: <home>/profiles/<name>/scripts, else the default home\n"
-    "    _phome = os.path.dirname(_home)\n"
-    "    _name = os.path.basename(_phome) if os.path.basename(os.path.dirname(_phome)) == \"profiles\" else \"default\"\n"
-    "    _rc = subprocess.call([sys.executable, installer, \"--profile\", _name,\n"
-    "                           \"--no-service\", \"--no-cron\"])\n"
-    "    if _rc != 0:\n"
-    "        sys.exit(\"install step failed (rc %d) - proofs not run\" % _rc)\n"
-    "elif os.path.exists(installer):\n"
-    "    print(\"proving the installed copy; not re-installing from %s\" % _tree)\n"
-    "\n"
-    "# not os.execv: on Windows that ends this process at once with status 0, before the proofs have run\n"
-    "sys.exit(subprocess.call([sys.executable, runner, \"--quiet\"] + sys.argv[1:]))\n")
+PROOFS_SHIM_TEXT = """\
+# Written by the crew installer (--nightly-proofs). Hermes cron runs scripts from HERMES_HOME/scripts only
+# and runs a .py one with whatever interpreter Hermes itself runs under (on the package-manager layout a bare
+# one that cannot import Hermes), so this hands over to the plugin's own copy of the proof runner, which
+# switches to the Hermes python itself.
+#
+# Before the proofs it installs the RELEASE checkout when this box has one. Parity compares every crew home
+# against the release, so a dev edit after the last install used to redden the night with no defect behind it
+# (10-20, 10-24); installing first keeps the box and the comparison on one tree. It installs from that checkout,
+# never from the temp export parity compares against: an install records its own source in owner.json, and a
+# temp path there goes stale. A shipped install (a user's own clone, no release checkout) is left alone.
+import os
+import subprocess
+import sys
+
+_home = os.path.dirname(os.path.abspath(__file__))
+runner = os.path.join(_home, "..", "plugins", "crew", "scripts", "crew_proofs.py")
+_pkg = ""
+_tree = ""
+_from_release = False
+try:
+    sys.path.insert(0, os.path.join(_home, "..", "plugins", "crew", "scripts"))
+    import crew_card
+    _pkg = crew_card.package_dir() or ""
+    _rel = os.environ.get("CREW_RELEASE") or (os.path.join(os.path.dirname(_pkg), "release") if _pkg else "")
+    if _rel and os.path.exists(os.path.join(_rel, ".git")):
+        _dirty = subprocess.run(["git", "-C", _rel, "status", "--porcelain"],
+                                capture_output=True, text=True).stdout.strip()
+        if _dirty:
+            print("WARNING: the release checkout %s has uncommitted changes - proofs run as installed" % _rel)
+        else:
+            _tree, _from_release = _rel, True
+except Exception as exc:                                   # noqa: BLE001 - never kill the night on this
+    print("WARNING: cannot resolve the crew package (%s)" % exc)
+
+installer = os.path.join(_tree, "install.py") if _tree else ""
+if _from_release and os.path.exists(installer):
+    # the profile this shim sits in: <home>/profiles/<name>/scripts, else the default home
+    _phome = os.path.dirname(_home)
+    _name = os.path.basename(_phome) if os.path.basename(os.path.dirname(_phome)) == "profiles" else "default"
+    _rc = subprocess.call([sys.executable, installer, "--profile", _name, "--no-service", "--no-cron"])
+    if _rc != 0:
+        sys.exit("install step failed (rc %d) - proofs not run" % _rc)
+elif _pkg:
+    print("proving the installed copy; not re-installing from %s" % _pkg)
+
+# not os.execv: on Windows that ends this process at once with status 0, before the proofs have run
+sys.exit(subprocess.call([sys.executable, runner, "--quiet"] + sys.argv[1:]))
+"""
+
 
 # Everything in the package's scripts/ ships: one list derived from the tree, so a new script can never be left
 # out of the installed copy (crew_safety.py once was, and every importer crashed). Bytecode never ships.
