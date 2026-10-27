@@ -1,3 +1,4 @@
+import { isCrewKey } from '../key-scope'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { AckResult, CrewApi } from '../api'
 import { useBoard } from '../data'
@@ -70,7 +71,7 @@ export function Board({ api, onOpenCard, flags, onFlags, home }: Props) {
   const wrap = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const away = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setNotesOpen(false) }
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setNotesOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape' && isCrewKey(e, wrap.current?.closest('.crew-scope') || null)) setNotesOpen(false) }
     document.addEventListener('click', away)
     document.addEventListener('keydown', esc)
     return () => { document.removeEventListener('click', away); document.removeEventListener('keydown', esc) }

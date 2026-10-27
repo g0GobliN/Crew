@@ -12814,6 +12814,22 @@
     };
   }
 
+  // src/key-scope.ts
+  var EDITABLE = '[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]';
+  function isEditable(el2) {
+    if (!el2) return false;
+    const tag = el2.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+    return el2.isContentEditable === true || !!el2.closest(EDITABLE);
+  }
+  function isCrewKey(e, root) {
+    const n = e.target;
+    const t = n && n.nodeType === 1 ? n : null;
+    if (isEditable(t) || isEditable(document.activeElement)) return false;
+    if (!t || t === document.body || t === document.documentElement) return true;
+    return !!root && root.contains(t);
+  }
+
   // src/components/Board.tsx
   var import_react6 = __toESM(require_react(), 1);
 
@@ -13637,7 +13653,7 @@ body:has(#crew-app[data-crew-shell]){margin:0;background:var(--crew-bg)}
         if (!wrap.current?.contains(e.target)) setNotesOpen(false);
       };
       const esc = (e) => {
-        if (e.key === "Escape") setNotesOpen(false);
+        if (e.key === "Escape" && isCrewKey(e, wrap.current?.closest(".crew-scope") || null)) setNotesOpen(false);
       };
       document.addEventListener("click", away);
       document.addEventListener("keydown", esc);
@@ -15701,8 +15717,7 @@ body:has(#crew-app[data-crew-shell]){margin:0;background:var(--crew-bg)}
     keyRef.current = { paused, selected, reload, onBack, closePanel };
     (0, import_react12.useEffect)(() => {
       const onKey = (e) => {
-        const tag = document.activeElement && document.activeElement.tagName || "";
-        if (tag === "INPUT" || tag === "TEXTAREA" || e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.ctrlKey || e.metaKey || e.altKey || !isCrewKey(e, root.current)) return;
         const k = keyRef.current;
         if (e.code === "Space") {
           e.preventDefault();

@@ -119,6 +119,22 @@ function subscribeCardPage(fn) {
   };
 }
 
+// src/key-scope.ts
+var EDITABLE = '[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]';
+function isEditable(el) {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return el.isContentEditable === true || !!el.closest(EDITABLE);
+}
+function isCrewKey(e, root) {
+  const n = e.target;
+  const t = n && n.nodeType === 1 ? n : null;
+  if (isEditable(t) || isEditable(document.activeElement)) return false;
+  if (!t || t === document.body || t === document.documentElement) return true;
+  return !!root && root.contains(t);
+}
+
 // src/components/Board.tsx
 import { useEffect as useEffect4, useMemo, useRef as useRef4, useState as useState4 } from "react";
 
@@ -942,7 +958,7 @@ function Board({ api, onOpenCard, flags, onFlags, home }) {
       if (!wrap.current?.contains(e.target)) setNotesOpen(false);
     };
     const esc = (e) => {
-      if (e.key === "Escape") setNotesOpen(false);
+      if (e.key === "Escape" && isCrewKey(e, wrap.current?.closest(".crew-scope") || null)) setNotesOpen(false);
     };
     document.addEventListener("click", away);
     document.addEventListener("keydown", esc);
@@ -3006,8 +3022,7 @@ function CardPage({ api, id, onBack, openChat, hash = false, boardHref = "/" }) 
   keyRef.current = { paused, selected, reload, onBack, closePanel };
   useEffect8(() => {
     const onKey = (e) => {
-      const tag = document.activeElement && document.activeElement.tagName || "";
-      if (tag === "INPUT" || tag === "TEXTAREA" || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || !isCrewKey(e, root.current)) return;
       const k = keyRef.current;
       if (e.code === "Space") {
         e.preventDefault();
@@ -3214,7 +3229,7 @@ function Splash({ api }) {
     ] }),
     /* @__PURE__ */ jsxs17("div", { className: "sp-foot", children: [
       "crew.forgecoreai.com \xB7 v",
-      "0.10.2"
+      "0.10.3"
     ] })
   ] });
 }

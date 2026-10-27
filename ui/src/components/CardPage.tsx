@@ -1,3 +1,4 @@
+import { isCrewKey } from '../key-scope'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CrewApi } from '../api'
 import { CardUiContext, type CardUi } from '../card-ui'
@@ -93,8 +94,7 @@ export function CardPage({ api, id, onBack, openChat, hash = false, boardHref = 
   keyRef.current = { paused, selected, reload, onBack, closePanel }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (document.activeElement && document.activeElement.tagName) || ''
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.ctrlKey || e.metaKey || e.altKey) return
+      if (e.ctrlKey || e.metaKey || e.altKey || !isCrewKey(e, root.current)) return
       const k = keyRef.current
       if (e.code === 'Space') { e.preventDefault(); setPaused(p => !p) }
       else if (e.key === 'r' || e.key === 'R') k.reload()

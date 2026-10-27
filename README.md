@@ -5,7 +5,7 @@
 **You ask once. A coordinator owns the card until its proof passes.**
 
 [![Hermes plugin](https://img.shields.io/badge/Hermes-plugin-3fb950?style=flat-square)](https://github.com/NousResearch/hermes-agent)
-[![Version](https://img.shields.io/badge/version-0.10.2-3fb950?style=flat-square)](plugin.yaml)
+[![Version](https://img.shields.io/badge/version-0.10.3-3fb950?style=flat-square)](plugin.yaml)
 [![tests](https://github.com/macd2/Crew/actions/workflows/tests.yml/badge.svg)](https://github.com/macd2/Crew/actions/workflows/tests.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -33,6 +33,12 @@ hands the card to a **coordinator** that owns it until the proof command exits 0
 result back in the same chat, or one concrete question when it truly needs you.
 
 [![The crew dashboard: a card's graph with its running worker selected and the live transcript](assets/dashboard.webp)](https://crew.forgecoreai.com)
+
+## What's new in 0.10.3
+
+- **Space and Escape stay with the chat.** With a chat beside a crew card (a split tile or a stacked tab), typing a
+  space in the chat no longer got swallowed by the card page or the board. The card and board keys now act only
+  when the focus is inside crew (issue #19).
 
 ## What's new in 0.10.2
 

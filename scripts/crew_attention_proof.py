@@ -414,6 +414,11 @@ def browser_leg():
             except Exception:
                 pass
             fetch("/ack/all?undo=1")
+            # the undo lands on the board one poll behind the fetch, so a single read here reports 0 of 3 on a
+            # busy box (2026-10-26 night) - wait for the total, then assert it
+            _end = time.time() + 10
+            while rows_now()[1].get("total") != start_total and time.time() < _end:
+                time.sleep(0.2)
             check("the browser leg left the board as it found it",
                   (rows_now()[1]).get("total") == start_total,
                   "%s of %s" % ((rows_now()[1]).get("total"), start_total))

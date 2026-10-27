@@ -303,6 +303,35 @@ ok(c_rows().includes(c_oldest) && c_rows()[c_rows().length - 1] === c_oldest, 't
 ok(c_host.querySelector('#panel .pbody') === c_body && c_body.scrollTop === 37, 'the panel body keeps its element and its scroll offset')
 ok(c_host.querySelector('#panel .plist.calls') && c_host.querySelector('#event'), 'page chrome stays mounted')
 ok(c_host.querySelectorAll('#scrubber .tick').length === c_gs.steps.length || c_host.querySelectorAll('#scrubber .tick').length > 0, 'scrubber follows the selected node')
+// Issue #19: the card page listens on document, and Desktop can show a chat beside it (split route tile, or the crew tab
+// kept mounted behind the chat tab). Space must stay the chat composer's (a contenteditable div), and keep pausing the card
+// when nothing is focused.
+const c_space = async target => {
+  const ev = new dom.window.KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true })
+  await c_act(async () => { target.dispatchEvent(ev) })
+  return ev.defaultPrevented
+}
+const c_live = () => c_host.querySelector('#live').textContent
+const c_ce = document.createElement('div')
+c_ce.setAttribute('contenteditable', 'true'); c_ce.setAttribute('role', 'textbox'); c_ce.tabIndex = 0
+const c_ceKid = document.createElement('span'); c_ce.appendChild(c_ceKid)
+const c_input = document.createElement('input'), c_other = document.createElement('div'); c_other.tabIndex = 0
+document.body.append(c_ce, c_input, c_other)
+c_ce.focus()
+eq(c_live(), 'LIVE', 'the card page starts live')
+eq(await c_space(c_ce), false, 'Space in a contenteditable composer beside the card page is not prevented')
+eq(await c_space(c_ceKid), false, 'Space in a child of the contenteditable is not prevented')
+eq(c_live(), 'LIVE', 'Space in the composer does not pause the card')
+eq(await c_space(c_input), false, 'Space in an INPUT is still left alone')
+c_other.focus()
+eq(await c_space(c_other), false, 'Space on a non-editable element outside the card page is not the card page\'s')
+eq(c_live(), 'LIVE', 'a key from outside the card page does not pause it')
+c_other.blur()
+eq(await c_space(document.body), true, 'Space with nothing focused is the card page\'s')
+eq(c_live(), 'PAUSED', 'Space on the body pauses the card')
+eq(await c_space(c_host.querySelector('.page-card')), true, 'Space inside the card page is the card page\'s')
+eq(c_live(), 'LIVE', 'Space inside the card page resumes it')
+c_ce.remove(); c_input.remove(); c_other.remove()
 // back to the board
 await c_act(async () => { c_host.querySelector('#rail a.railbtn').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })) })
 await c_settle(10)
