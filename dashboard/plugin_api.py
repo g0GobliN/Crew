@@ -40,6 +40,7 @@ import os
 import re
 import sys
 import threading
+import time
 from fastapi import APIRouter, Body, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 
@@ -62,6 +63,108 @@ _RESPONSE_HEADERS = {
 
 _crew_lock = threading.Lock()
 _crew_mod = None
+
+# Repeated identical reads (the board and the card being watched, polled by Desktop and every dashboard
+# tab) are served from a short-TTL cache with single-flight per key. Without it each poll re-renders the
+# whole graph, and those renders are CPU-bound Python sharing one GIL, so a wave of concurrent misses
+# costs one render per reader. With the cache one build serves the whole wave.
+_CACHE_TTL_SECONDS = 3.0
+# /healthz answers for the board it just read: a cached one could report health the plugin no longer has,
+# so it is the one GET that always builds.
+_UNCACHED_PATHS = ("/healthz",)
+_cache = {}                      # key -> (expires_monotonic, (status, content, content_type))
+_cache_lock = threading.Lock()
+_cache_generation = 0            # bumped by every write; a build from before it is never published
+_key_locks = {}
+_key_locks_guard = threading.Lock()
+
+
+def _key_lock(key):
+    """The single-flight lock for one cache key, so a wave waits for one render, not N."""
+    with _key_locks_guard:
+        lock = _key_locks.get(key)
+        if lock is None:
+            lock = _key_locks[key] = threading.Lock()
+        return lock
+
+
+def _render_answer(make):
+    """(status, content bytes, content type) from one builder call."""
+    status, body, content_type = make(_crew())
+    return status, (body.encode("utf-8") if isinstance(body, str) else body), content_type
+
+
+def _invalidate():
+    """Drop every cached read after a write, and disown builds already in flight: a render that
+    started before the write and finishes after it would otherwise publish the pre-write board."""
+    global _cache_generation
+    with _cache_lock:
+        _cache.clear()
+        _cache_generation += 1
+
+
+def _board_identity() -> str:
+    """The board this answer would be built from, so a cached answer can never outlive a switch to another
+    one (a second HERMES_HOME in the same process still gets its own keys)."""
+    try:
+        _crew()                                # loads scripts/ onto sys.path
+        return importlib.import_module("crew_card").kanban_db() or ""
+    except Exception:
+        return ""
+
+
+def _build(request: Request, make, embed: str | None):
+    """This GET's answer from the cache; writes (acks) always build fresh.
+
+    Stale-while-revalidate: a request that finds the entry expired takes the refresh lock when it is
+    free and rebuilds; otherwise it is answered from the value already there. Waiting threads would
+    hold FastAPI's whole pool while one render runs, and the pool is what every other route needs.
+
+    """
+    key = (request.method, request.url.path, request.url.query, embed or "", _board_identity())
+    cacheable = request.method == "GET" and not request.url.path.rstrip("/").endswith(_UNCACHED_PATHS)
+    ttl = _CACHE_TTL_SECONDS if cacheable else 0.0
+    if not ttl:
+        built = _render_answer(make)
+        # A write (ack, card action) changes the board: drop the reads so the next poll shows it,
+        # instead of serving the pre-write answer for the rest of the TTL.
+        _invalidate()
+        return built
+    entry = _cache.get(key)
+    if entry is not None and entry[0] > time.monotonic():
+        return entry[1]
+    if entry is not None:                 # stale: one refresher, everyone else is served
+        lock = _key_lock(key)
+        if not lock.acquire(blocking=False):
+            return entry[1]
+        try:
+            entry = _cache.get(key)
+            if entry is not None and entry[0] > time.monotonic():
+                return entry[1]
+            return _refresh(key, make, ttl)
+        finally:
+            lock.release()
+    with _key_lock(key):                  # cold: the first wave waits for the one build
+        entry = _cache.get(key)
+        if entry is not None:
+            return entry[1]
+        return _refresh(key, make, ttl)
+
+
+def _refresh(key, make, ttl):
+    """Build one answer and store it; an error answer is never cached, and an expired entry is dropped
+    rather than kept for the life of the process (the process outlives every card a board ever held)."""
+    with _cache_lock:
+        generation = _cache_generation
+    built = _render_answer(make)
+    if 200 <= built[0] < 300:
+        now = time.monotonic()
+        with _cache_lock:
+            if generation == _cache_generation:      # a write landed meanwhile: do not publish this one
+                _cache[key] = (now + ttl, built)
+            for stale in [k for k, v in _cache.items() if v[0] <= now]:
+                del _cache[stale]
+    return built
 
 
 def _crew():
@@ -107,8 +210,7 @@ def _render(request: Request, make, embed: str | None = None) -> Response:
     through unchanged for both modes but "text". An exception is a 500 with the detail in the server log only
     (for "text", a 500 inside the envelope): there is no second path to fall back to."""
     try:
-        status, body, content_type = make(_crew())
-        content = body.encode("utf-8") if isinstance(body, str) else body
+        status, content, content_type = _build(request, make, embed)
         if status >= 400 and embed != "text":   # an error answer passes through as built (as the daemon's did)
             return Response(content=content, status_code=status, media_type=content_type)
         if embed == "asset" and status == 200:
@@ -279,4 +381,5 @@ def post_action(name: str, body: dict | None = Body(default=None)):
     except Exception as exc:  # noqa: BLE001 - a button press must answer, never hang the page
         _log.exception("crew dashboard: action %s on %s failed", name, card)
         return JSONResponse(content={"ok": False, "text": "%s failed: %s" % (name, exc)}, headers=dict(_RESPONSE_HEADERS))
+    _invalidate()                   # these actions move or rewrite cards: the next poll must not be cached
     return JSONResponse(content={"ok": bool(ok), "text": str(text)}, headers=dict(_RESPONSE_HEADERS))
