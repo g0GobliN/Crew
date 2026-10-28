@@ -90,7 +90,9 @@ def _key_lock(key):
 
 def _render_answer(make):
     """(status, content bytes, content type) from one builder call."""
-    status, body, content_type = make(_crew())
+    crew = _crew()
+    with crew.CG.read_session():   # handles live for this render only
+        status, body, content_type = make(crew)
     return status, (body.encode("utf-8") if isinstance(body, str) else body), content_type
 
 

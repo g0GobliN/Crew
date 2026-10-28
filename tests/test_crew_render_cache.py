@@ -6,9 +6,11 @@ rebuilds are CPU-bound Python sharing one GIL, so one build must serve a whole w
 proves 12 concurrent readers cause one build), and a request that finds an expired entry must never
 queue behind the thread that is refreshing it.
 """
+import contextlib
 import os
 import sys
 import threading
+import types
 import time
 import unittest
 from unittest.mock import patch
@@ -23,7 +25,7 @@ from dashboard import plugin_api as api  # noqa: E402
 
 BOARD = "/api/plugins/crew/board.json"
 CARD = "/api/plugins/crew/card/t_abc.json"
-CREW = object()          # stands in for the loaded crew_graph_serve module
+CREW = types.SimpleNamespace(CG=types.SimpleNamespace(read_session=contextlib.nullcontext))   # stands in for crew_graph_serve
 
 
 class _URL:
